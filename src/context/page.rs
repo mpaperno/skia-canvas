@@ -75,7 +75,7 @@ impl PageRecorder{
       canvas.restore_to_count(1);
       canvas.save();
       if let Some(clip) = &self.clip{
-        canvas.clip_path(&clip, ClipOp::Intersect, true /* antialias */);
+        canvas.clip_path(clip, ClipOp::Intersect, true /* antialias */);
       }
       canvas.set_matrix(&self.matrix.into());
     }
@@ -207,7 +207,7 @@ impl Page{
       Ok(Data::new_copy(&memory))
     }
     else if format == "svg" {
-      let flags = outline.then(|| Flags::CONVERT_TEXT_TO_PATHS);
+      let flags = outline.then_some(Flags::CONVERT_TEXT_TO_PATHS);
       let mut canvas = svg::Canvas::new(Rect::from_size(self.bounds.size()), flags);
       canvas.draw_picture(&picture, None, None);
       Ok(canvas.end())
@@ -305,7 +305,7 @@ impl PageSequence{
       premultiplied:Option<bool>,
       color_type: Option<ColorType>
     ) -> Result<(), String>{
-    self.first().write(&pattern, &format, quality, density, outline, matte, bounds, premultiplied, color_type, self.engine)
+    self.first().write(pattern, format, quality, density, outline, matte, bounds, premultiplied, color_type, self.engine)
   }
 
   #[allow(clippy::too_many_arguments)]

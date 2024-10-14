@@ -265,7 +265,7 @@ pub fn arc(mut cx: FunctionContext) -> JsResult<JsUndefined> {
   let ccw = bool_arg_or(&mut cx, 6, false);
   if let [x, y, radius, start_angle, end_angle] = nums.as_slice(){
     let matrix = this.state.matrix;
-    let mut arc = Path2D::new();
+    let mut arc = Path2D::default();
     arc.add_ellipse((*x, *y), (*radius, *radius), 0.0, *start_angle, *end_angle, ccw);
     this.path.add_path(&arc.path.with_transform(&matrix), (0,0), Extend);
   }
@@ -284,7 +284,7 @@ pub fn ellipse(mut cx: FunctionContext) -> JsResult<JsUndefined> {
       return cx.throw_error("radii cannot be negative")
     }
     let matrix = this.state.matrix;
-    let mut arc = Path2D::new();
+    let mut arc = Path2D::default();
     arc.add_ellipse((*x, *y), (*x_radius, *y_radius), *rotation, *start_angle, *end_angle, ccw);
     this.path.add_path(&arc.path.with_transform(&matrix), (0,0), Extend);
   }
@@ -761,7 +761,7 @@ pub fn drawImage(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     Err(err) => return cx.throw_error(format!("Cannot convert argument to image type, got error: {}", err))
   };
 
-  let image = &image.borrow();
+  let image = image.borrow();
   let mut size = Size::from_isize(image.image_size());
 
   if size.is_empty() {
