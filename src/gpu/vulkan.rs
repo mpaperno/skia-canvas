@@ -5,13 +5,15 @@ use std::os::raw;
 
 use ash::{Entry, Instance, vk};
 use ash::vk::Handle;
-use skia_safe::gpu::{self, DirectContext, SurfaceOrigin};
-use skia_safe::{ImageInfo, ISize, Budgeted, Surface, ColorSpace};
+use skia_safe::gpu::{self, Budgeted, direct_contexts, SurfaceOrigin, surfaces};
+use skia_safe::{ImageInfo, ISize, Surface, ColorSpace};
 
+#[cfg(feature = "window")]
 use std::sync::{Arc, Mutex};
+#[cfg(feature = "window")]
 use skulpin::{CoordinateSystem, Renderer, RendererBuilder};
+#[cfg(feature = "window")]
 use skulpin::rafx::api::RafxExtents2D;
-
 #[cfg(feature = "window")]
 use winit::{
     dpi::{LogicalSize, PhysicalSize},
@@ -46,7 +48,7 @@ impl VulkanEngine {
                 let this = local_ctx.as_mut().unwrap();
                 if this._supported == 0 {
                     let mut context = this.context.clone();
-                    let surface = Surface::new_render_target(
+                    let surface = surfaces::render_target(
                         &mut context,
                         Budgeted::Yes,
                         &ImageInfo::new_n32_premul(ISize::new(10, 10), Some(ColorSpace::new_srgb())),
@@ -54,6 +56,7 @@ impl VulkanEngine {
                         SurfaceOrigin::BottomLeft,
                         None,
                         true,
+                        None
                     );
                     if surface.is_some() {
                         this._supported = 1;
@@ -96,7 +99,7 @@ impl VulkanEngine {
                 )
             };
 
-            DirectContext::new_vulkan(&backend_context, None)
+            direct_contexts::make_vulkan(&backend_context, None)
         }.ok_or("Failed to create Vulkan context")?;
 
         Ok(Self {
@@ -111,7 +114,7 @@ impl VulkanEngine {
         VK_CONTEXT.with(|cell| {
             let local_ctx = cell.borrow();
             let mut context = local_ctx.as_ref().unwrap().context.clone();
-            Surface::new_render_target(
+            surfaces::render_target(
                 &mut context,
                 Budgeted::Yes,
                 image_info,
@@ -119,16 +122,19 @@ impl VulkanEngine {
                 SurfaceOrigin::BottomLeft,
                 None,
                 true,
+                None
             )
         })
     }
 }
 
 
+#[cfg(feature = "window")]
 pub struct VulkanRenderer {
     skulpin: Arc<Mutex<Renderer>>,
 }
 
+#[cfg(feature = "window")]
 unsafe impl Send for VulkanRenderer {}
 
 #[cfg(feature = "window")]
@@ -152,7 +158,7 @@ impl VulkanRenderer {
 
     }
 
-    pub fn draw<F: FnOnce(&mut skia_safe::Canvas, LogicalSize<f32>)>(
+    pub fn draw<F: FnOnce(&skia_safe::Canvas, LogicalSize<f32>)>(
         &mut self,
         window: &Window,
         f: F,

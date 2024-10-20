@@ -71,7 +71,7 @@ impl Typesetter{
 
   pub fn layout(&self, paint:&Paint) -> (Paragraph, Point) {
     let mut char_style = self.char_style.clone();
-    char_style.set_foreground_color(Some(paint.clone()));
+    char_style.set_foreground_paint(&paint.clone());
 
     let mut paragraph_builder = ParagraphBuilder::new(&self.graf_style, &self.typefaces);
     paragraph_builder.push_style(&char_style);
@@ -105,22 +105,24 @@ impl Typesetter{
       return vec![vec![0.0, 0.0, 0.0, 0.0, 0.0, ascent, descent, ascent, descent, hang, norm, ideo]]
     }
 
-    // find the bounds and text-range for each individual line
-    let origin = paragraph.get_line_metrics()[0].baseline;
-    let line_rects:Vec<(Rect, Range<usize>, f32)> = paragraph.get_line_metrics().iter().map(|line|{
+    // find the bounds and text-range for each individual line & the bounds for the whole text run
+    let mut bounds = Rect::new_empty();
+    let line_metrics = paragraph.get_line_metrics();
+    let origin = line_metrics[0].baseline;
+    let line_rects:Vec<(Rect, Range<usize>, f32)> = line_metrics.iter().map(|line|{
       let baseline = line.baseline - origin;
-      let rect = Rect::new(line.left as f32, (baseline - line.ascent) as f32,
-                          (line.left + line.width) as f32, (baseline + line.descent) as f32);
+      let rect = Rect::new(
+        line.left as f32,                (baseline - line.ascent) as f32,
+        (line.left + line.width) as f32, (baseline + line.descent) as f32
+      ).with_offset((alignment, offset));
+
       let range = string_idx_range(&self.text, line.start_index,
         if self.width==GALLEY{ line.end_index }else{ line.end_excluding_whitespaces }
       );
-      (rect.with_offset((alignment, offset)), range, baseline as f32 + offset)
-    }).collect();
 
-    // take their union to find the bounds for the whole text run
-    let (bounds, chars) = line_rects.iter().fold((Rect::new_empty(), 0), |(union, indices), (rect, range, _)|
-      (Rect::join2(union, rect), range.end)
-    );
+      bounds.join(rect);
+      (rect, range, baseline as f32 + offset)
+    }).collect();
 
     // return a list-of-lists whose first entry is the whole-run font metrics and subsequent entries are
     // line-rect/range values (with the js side responsible for restructuring the whole bundle)
@@ -332,7 +334,7 @@ pub fn get_alignment_factor(graf_style:&ParagraphStyle) -> f32 {
   }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum Baseline{ Top, Hanging, Middle, Alphabetic, Ideographic, Bottom }
 
 pub fn to_text_baseline(mode_name:&str) -> Option<Baseline>{
@@ -424,7 +426,7 @@ impl FontLibrary{
     // merge the system fonts and our dynamically added fonts into one list of FontStyles
     let mut dynamic = TypefaceFontProvider::new();
     for (font, alias) in &self.fonts{
-      dynamic.register_typeface(font.clone(), alias.clone());
+      dynamic.register_typeface(font.clone(), alias.as_deref());
     }
     let std_mgr = FontMgr::new();
     let dyn_mgr:FontMgr = dynamic.into();
@@ -479,7 +481,7 @@ impl FontLibrary{
 
     let mut assets = TypefaceFontProvider::new();
     for (font, alias) in &self.fonts {
-      assets.register_typeface(font.clone(), alias.as_ref());
+      assets.register_typeface(font.clone(), alias.as_deref());
     }
 
     let mut collection = FontCollection::new();
@@ -503,6 +505,7 @@ impl FontLibrary{
     style.set_font_size(spec.size);
     style.set_height(spec.leading / spec.size);
     style.set_height_override(true);
+    style.set_typeface(matches[0].clone());
     style.reset_font_features();
     for (feat, val) in &spec.features{
       style.add_font_feature(feat, *val);
@@ -544,12 +547,7 @@ impl FontLibrary{
           let chars = vec![param.tag.a(), param.tag.b(), param.tag.c(), param.tag.d()];
           let tag = String::from_utf8(chars).unwrap();
           if tag == "wght"{
-            // NB: currently setting the value to *one less* than what was requested
-            //     to work around weird Skia behavior that returns something nonlinearly
-            //     weighted in many cases (but not for ±1 of that value). This makes it so
-            //     that n × 100 values will render correctly (and the bug will manifest at
-            //     n × 100 + 1 instead)
-            let weight = *style.font_style().weight() - 1;
+            let weight = *style.font_style().weight();
             let value = (weight as f32).max(param.min).min(param.max);
             let coords = [ Coordinate { axis: param.tag, value } ];
             let v_pos = VariationPosition { coordinates: &coords };
@@ -557,7 +555,7 @@ impl FontLibrary{
             let face = font.clone_with_arguments(&args).unwrap();
 
             let mut dynamic = TypefaceFontProvider::new();
-            dynamic.register_typeface(face, alias);
+            dynamic.register_typeface(face, alias.as_deref());
 
             let mut collection = FontCollection::new();
             collection.set_default_font_manager(FontMgr::new(), None);
@@ -627,7 +625,7 @@ pub fn addFamily(mut cx: FunctionContext) -> JsResult<JsValue> {
       Err(why) => {
         return cx.throw_error(format!("{}: \"{}\"", why, path.display()))
       },
-      Ok(bytes) => Typeface::from_data(Data::new_copy(&bytes), None)
+      Ok(bytes) => FontMgr::new().new_from_data(&bytes, None)
     };
 
     match typeface {

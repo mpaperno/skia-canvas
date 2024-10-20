@@ -8,8 +8,9 @@ use neon::prelude::*;
 use skia_safe::{Canvas as SkCanvas, Surface, Paint, Path, PathOp, Image, ImageInfo, Contains,
                 Rect, Point, IPoint, Size, ISize, Color, Color4f, ColorType, ColorSpace, Data,
                 PaintStyle, BlendMode, AlphaType, ClipOp, PictureRecorder, Picture, Drawable,
-                dash_path_effect, path_1d_path_effect};
+                dash_path_effect, path_1d_path_effect, path_utils};
 use skia_safe::image::CachingHint;
+use skia_safe::images::raster_from_data;
 use skia_safe::image_filters::drop_shadow_only;
 use skia_safe::matrix::{ Matrix, TypeMask };
 use skia_safe::textlayout::{ParagraphStyle, TextStyle};
@@ -187,7 +188,7 @@ impl Context2D{
   }
 
   pub fn with_canvas<F>(&self, f:F)
-    where F:FnOnce(&mut SkCanvas)
+    where F:FnOnce(&SkCanvas)
   {
     self.with_recorder(|mut recorder|{
       recorder.append(f);
@@ -204,8 +205,8 @@ impl Context2D{
   }
 
   // DRY helper for render_to_canvas()
-  fn render_shadow<F>(&self, canvas:&mut SkCanvas, paint:&Paint, f:F)
-    where F:Fn(&mut SkCanvas, &Paint)
+  fn render_shadow<F>(&self, canvas:&SkCanvas, paint:&Paint, f:F)
+    where F:Fn(&SkCanvas, &Paint)
   {
     if let Some(shadow_paint) = self.paint_for_shadow(paint){
       canvas.save();
@@ -217,7 +218,7 @@ impl Context2D{
   }
 
   pub fn render_to_canvas<F>(&self, paint:&Paint, f:F)
-    where F:Fn(&mut SkCanvas, &Paint)
+    where F:Fn(&SkCanvas, &Paint)
   {
     match self.state.global_composite_operation{
       BlendMode::SrcIn | BlendMode::SrcOut |
@@ -324,12 +325,16 @@ impl Context2D{
         canvas.save();
         let spacing = tile.spacing();
         let offset = (-spacing.0/2.0, -spacing.1/2.0);
-        let stencil = paint.get_fill_path(&path, None, None).unwrap();
+
+        let mut stencil = Path::default();
+        path_utils::fill_path_with_paint(&path, &paint, &mut stencil, None, None);
         let stencil_frame = &Path::rect(stencil.bounds().with_offset(offset).with_outset(spacing), None);
 
         let mut tile_paint = paint.clone();
         tile.mix_into(&mut tile_paint, self.state.global_alpha);
-        let tile_path = tile_paint.get_fill_path(stencil_frame, None, None).unwrap();
+
+        let mut tile_path = Path::default();
+        path_utils::fill_path_with_paint(&stencil_frame, &tile_paint, &mut tile_path, None, None);
 
         let mut fill_paint = paint.clone();
         fill_paint.set_style(PaintStyle::Fill);
@@ -367,7 +372,12 @@ impl Context2D{
       PaintStyle::Stroke => {
         let paint = self.paint_for_drawing(PaintStyle::Stroke);
         let precision = 0.3; // this is what Chrome uses to compute this
-        match paint.get_fill_path(path, None, Some(precision)){
+
+        let mut new_path = Path::default();
+        let matrix: Matrix = Matrix::scale((precision, precision));
+        path_utils::fill_path_with_paint(&path, &paint, &mut new_path, None, matrix);
+
+        match Some(new_path) {
           Some(traced_path) => traced_path.contains(point),
           None => path.contains(point)
         }
@@ -461,7 +471,7 @@ impl Context2D{
     // works just like draw_image in terms of src/dst rects, but clears the dst_rect and then draws
     // without clips, transforms, alpha, blend, or shadows
     let data = Data::new_copy(buffer);
-    if let Some(bitmap) = Image::from_raster_data(info, data, info.min_row_bytes()) {
+    if let Some(bitmap) = raster_from_data(info, data, info.min_row_bytes()) {
       self.push(); // cache matrix & clip in self.state
       self.with_canvas(|canvas| {
         let paint = Paint::default();
@@ -528,7 +538,11 @@ impl Context2D{
         Some(path) => {
           let marker = match path.is_last_contour_closed(){
             true => path.clone(),
-            false => paint.get_fill_path(path, None, None).unwrap()
+            false => {
+                let mut new_path = Path::default();
+                path_utils::fill_path_with_paint(&path, &paint, &mut new_path, None, None);
+                new_path
+            }
           };
           path_1d_path_effect::new(
             &marker,
