@@ -206,6 +206,11 @@ describe("Image", () => {
       img.src = FORMAT + '.ico'
       expect(img).toMatchObject(PARSED)
     })
+
+    test("WEBP", () => {
+      img.src = FORMAT + '.webp'
+      expect(img).toMatchObject(PARSED)
+    })
   })
 })
 
