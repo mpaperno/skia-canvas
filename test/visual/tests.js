@@ -4,6 +4,7 @@ var DOMMatrix
 var Image
 var imageSrc
 var tests = {}
+var isWeb = false;
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = tests
@@ -17,6 +18,7 @@ if (typeof module !== 'undefined' && module.exports) {
   Image = window.Image
   DOMMatrix = window.DOMMatrix
   imageSrc = function (filename) { return filename }
+  isWeb = true;
 }
 
 tests['clearRect()'] = function (ctx) {
@@ -302,18 +304,37 @@ tests['quadraticCurveTo()'] = function (ctx) {
   ctx.stroke()
 }
 
-tests['transform()'] = function (ctx) {
-  var sin = Math.sin(Math.PI / 6)
-  var cos = Math.cos(Math.PI / 6)
+/** @param {skCanvas.CanvasRenderingContext2D} ctx */
+function drawPinwheel(ctx, {scl = 1, offset = 25, len = 65, cb = null} = {}) {
   ctx.translate(100, 100)
-  ctx.scale(0.5, 0.5)
-  var c = 0
+  ctx.scale(scl, scl)
+  const sin = Math.sin(Math.PI / 6)
+  const cos = Math.cos(Math.PI / 6)
   for (var i = 0; i <= 12; i++) {
-    c = Math.floor(255 / 12 * i)
+    const c = Math.floor(240 / 12 * i)
     ctx.fillStyle = 'rgb(' + c + ',' + c + ',' + c + ')'
-    ctx.fillRect(0, 0, 100, 10)
-    ctx.transform(cos, sin, -sin, cos, 0, 0)
+    ctx.fillRect(offset, offset, len, 10)
+    if (cb)
+      cb(cos, sin, -sin, cos)
+    else
+      ctx.transform(cos, sin, -sin, cos, 0, 0)
   }
+}
+
+tests['transform()'] = function (ctx) {
+  drawPinwheel(ctx, { scl: .5, offset: 0, len:100 })
+}
+
+/** @param {skCanvas.CanvasRenderingContext2D} ctx */
+tests['transform() with DOMMatrix'] = function (ctx) {
+  if (!isWeb)
+    drawPinwheel(ctx, { scl: .5, offset: 0, len:100, cb: (a,b,c,d) => ctx.transform(new DOMMatrix([a,b,c,d, 0, 0])) })
+}
+
+/** @param {skCanvas.CanvasRenderingContext2D} ctx */
+tests['transform() with matrix-like object'] = function (ctx) {
+  if (!isWeb)
+    drawPinwheel(ctx, { scl: .5, offset: 0, len:100, cb: (a,b,c,d) => ctx.transform({a: a, b: b, c: c, d: d, e: 0, f: 0}) })
 }
 
 tests['rotate()'] = function (ctx) {
@@ -1599,19 +1620,6 @@ tests['shadow scale & skew'] = function (ctx) {
   ctx.scale(0.85, 0.85)
   ctx.transform(1, 0.2, 0.3, 1, 0, 0);
   drawShadowPattern(ctx, { offset: [10,10], blur: 9 })
-}
-
-function drawPinwheel(ctx, {scl = 1, offset = 25, len = 65} = {}) {
-  ctx.translate(100, 100)
-  ctx.scale(scl, scl)
-  const sin = Math.sin(Math.PI / 6)
-  const cos = Math.cos(Math.PI / 6)
-  for (var i = 0; i <= 12; i++) {
-    const c = Math.floor(240 / 12 * i)
-    ctx.fillStyle = 'rgb(' + c + ',' + c + ',' + c + ')'
-    ctx.fillRect(offset, offset, len, 10)
-    ctx.transform(cos, sin, -sin, cos, 0, 0)
-  }
 }
 
 tests['shadowBlur rotate'] = function (ctx) {
