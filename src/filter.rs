@@ -2,7 +2,7 @@
 #![allow(unused_imports)]
 #![allow(unused_variables)]
 #![allow(dead_code)]
-use skia_safe::{Paint, Matrix, Point, Color, MaskFilter, ImageFilter as SkImageFilter,
+use skia_safe::{Paint, Matrix, Point, Color, ColorSpace, MaskFilter, ImageFilter as SkImageFilter,
                 BlurStyle, FilterMode, MipmapMode, SamplingOptions, TileMode,
                 image_filters, color_filters, table_color_filter};
 
@@ -76,7 +76,7 @@ impl Filter {
             let scale = Point{x:matrix.scale_x(), y:matrix.scale_y()};
             let point = (offset.x / scale.x, offset.y / scale.y);
             let sigma = (    blur / scale.x,     blur / scale.y);
-            image_filters::drop_shadow(point, sigma, *color, chain, None)
+            image_filters::drop_shadow(point, sigma, *color, ColorSpace::new_srgb(), chain, None)
           },
           FilterSpec::Plain{ name, value } => match name.as_ref() {
             "blur" => {
@@ -100,7 +100,7 @@ impl Filter {
                 0.0,  amt,  0.0,  0.0, 0.0,
                 0.0,  0.0,  amt,  0.0, 0.0,
                 0.0,  0.0,  0.0,  1.0, 0.0
-              ]);
+              ], color_filters::Clamp::Yes);
               image_filters::color_filter(color_matrix, chain, None)
             },
             "contrast" => {
@@ -111,7 +111,7 @@ impl Filter {
                 *val = (127.0 + amt * orig - (127.0 * amt )) as u8;
               }
               let table = Some(&ramp);
-              let color_table = table_color_filter::from_argb(None, table, table, table);
+              let color_table = color_filters::table_argb(None, table, table, table).unwrap();
               image_filters::color_filter(color_table, chain, None)
             },
             "grayscale" => {
@@ -121,7 +121,7 @@ impl Filter {
                 (0.2126 - 0.2126 * amt), (0.7152 + 0.2848  * amt), (0.0722 - 0.0722 * amt), 0.0, 0.0,
                 (0.2126 - 0.2126 * amt), (0.7152 - 0.7152  * amt), (0.0722 + 0.9278 * amt), 0.0, 0.0,
                  0.0,                     0.0,                      0.0,                    1.0, 0.0
-              ]);
+              ], color_filters::Clamp::Yes);
               image_filters::color_filter(color_matrix, chain, None)
             },
             "invert" => {
@@ -132,7 +132,7 @@ impl Filter {
                 *val = (orig * (1.0 - amt) + inv * amt) as u8;
               }
               let table = Some(&ramp);
-              let color_table = table_color_filter::from_argb(None, table, table, table);
+              let color_table = color_filters::table_argb(None, table, table, table).unwrap();
               image_filters::color_filter(color_table, chain, None)
             },
             "opacity" => {
@@ -142,7 +142,7 @@ impl Filter {
                 0.0,  1.0,  0.0,  0.0,  0.0,
                 0.0,  0.0,  1.0,  0.0,  0.0,
                 0.0,  0.0,  0.0,  amt,  0.0
-              ]);
+              ], color_filters::Clamp::Yes);
               image_filters::color_filter(color_matrix, chain, None)
             },
             "saturate" => {
@@ -152,7 +152,7 @@ impl Filter {
                 (0.2126 - 0.2126 * amt), (0.7152 + 0.2848 * amt), (0.0722 - 0.0722 * amt), 0.0, 0.0,
                 (0.2126 - 0.2126 * amt), (0.7152 - 0.7152 * amt), (0.0722 + 0.9278 * amt), 0.0, 0.0,
                  0.0,                     0.0,                     0.0,                    1.0, 0.0
-              ]);
+              ], color_filters::Clamp::Yes);
               image_filters::color_filter(color_matrix, chain, None)
             },
             "sepia" => {
@@ -162,7 +162,7 @@ impl Filter {
                 (0.349 - 0.349 * amt), (0.686 + 0.314 * amt), (0.168 - 0.168 * amt), 0.0, 0.0,
                 (0.272 - 0.272 * amt), (0.534 - 0.534 * amt), (0.131 + 0.869 * amt), 0.0, 0.0,
                  0.0,                   0.0,                   0.0,                  1.0, 0.0
-              ]);
+              ], color_filters::Clamp::Yes);
               image_filters::color_filter(color_matrix, chain, None)
             },
             "hue-rotate" => {
@@ -173,7 +173,7 @@ impl Filter {
                 (0.213 - cos*0.213 + sin*0.143), (0.715 + cos*0.285 + sin*0.140), (0.072 - cos*0.072 - sin*0.283), 0.0, 0.0,
                 (0.213 - cos*0.213 - sin*0.787), (0.715 - cos*0.715 + sin*0.715), (0.072 + cos*0.928 + sin*0.072), 0.0, 0.0,
                  0.0,                             0.0,                             0.0,                            1.0, 0.0
-              ]);
+              ], color_filters::Clamp::Yes);
               image_filters::color_filter(color_matrix, chain, None)
             },
             _ => chain

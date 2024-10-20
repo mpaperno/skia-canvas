@@ -9,7 +9,7 @@ use metal::{CommandQueue, Device, MTLPixelFormat, MetalLayer};
 use objc::runtime::YES;
 use std::sync::{Arc, Mutex};
 use skia_safe::{
-    gpu::{mtl, BackendRenderTarget, DirectContext, SurfaceOrigin},
+    gpu::{mtl, BackendRenderTarget, direct_contexts, SurfaceOrigin, surfaces},
     scalar, Budgeted, ImageInfo, ColorType, Size, Surface,
 };
 pub use objc::rc::autoreleasepool;
@@ -54,7 +54,7 @@ impl MetalEngine {
               std::ptr::null(),
           )
       };
-      if let Some(context) = DirectContext::new_metal(&backend_context, None){
+      if let Some(context) = direct_contexts::make_metal(&backend_context, None){
           Some(MetalEngine{context})
       }else{
           None
@@ -68,7 +68,7 @@ impl MetalEngine {
             let local_ctx = cell.borrow();
             let mut context = local_ctx.as_ref().unwrap().context.clone();
 
-            Surface::new_render_target(
+            surfaces::render_target(
                 &mut context,
                 Budgeted::Yes,
                 image_info,
@@ -76,6 +76,7 @@ impl MetalEngine {
                 SurfaceOrigin::BottomLeft,
                 None,
                 true,
+                None,
             )
         })
     }

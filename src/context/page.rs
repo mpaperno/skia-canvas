@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::Path as FilePath;
+use std::io;
 use rayon::prelude::*;
 use neon::prelude::*;
 use skia_safe::{Canvas as SkCanvas,
@@ -7,7 +8,8 @@ use skia_safe::{Canvas as SkCanvas,
                 ClipOp, Data, Color, ColorSpace, ColorType,
                 PictureRecorder, Picture, EncodedImageFormat, Image as SkImage,
                 svg::{self, canvas::Flags}, pdf, Document, ImageInfo, RoundOut,
-                image::BitDepth, image::CachingHint};
+                image::BitDepth, image::CachingHint,
+                images::deferred_from_picture};
 
 use crc::{Crc, CRC_32_ISO_HDLC};
 const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
@@ -40,7 +42,7 @@ impl PageRecorder{
   }
 
   pub fn append<F>(&mut self, f:F)
-    where F:FnOnce(&mut SkCanvas)
+    where F:FnOnce(&SkCanvas)
   {
     if let Some(canvas) = self.current.recording_canvas() {
       f(canvas);
@@ -102,7 +104,7 @@ impl PageRecorder{
     if self.cache.is_none(){
       if let Some(pict) = page.get_picture(None, None){
         let size = page.bounds.size().to_floor();
-        self.cache = SkImage::from_picture(pict, size, None, None, BitDepth::U8, Some(ColorSpace::new_srgb()));
+        self.cache = deferred_from_picture(pict, size, None, None, BitDepth::U8, Some(ColorSpace::new_srgb()), None);
       }
     }
     self.cache.clone()
@@ -135,7 +137,7 @@ impl Page{
   }
 
   pub fn get_image(&self, picture: &Picture, color_space: impl Into<Option<ColorSpace>>, bit_depth: Option<BitDepth>) -> Result<SkImage, String> {
-    SkImage::from_picture(picture, self.bounds.size().to_floor(), None, None, bit_depth.unwrap_or(BitDepth::U8), color_space)
+    deferred_from_picture(picture, self.bounds.size().to_floor(), None, None, bit_depth.unwrap_or(BitDepth::U8), color_space, None)
     .ok_or("Error generating image".to_string())
   }
 
@@ -163,7 +165,7 @@ impl Page{
     let render_bounds = bounds.unwrap_or(self.bounds);
     if render_bounds.is_empty() || !self.bounds.intersects(render_bounds) {
       return Err(
-        format!("Render bounds ({:?}) must be non-empty and intersect the canvas bounds ({:?}).", render_bounds, self.bounds)
+        format!("Render bounds ({:?}) must not be empty and must intersect the page bounds ({:?}).", render_bounds, self.bounds)
       );
     }
     let picture = self.get_picture(matte, Some(&render_bounds)).ok_or("Could not generate picture")?;
@@ -188,7 +190,7 @@ impl Page{
           .draw_picture(&picture, None, None);
         // This unwrap() should never panic because we validated the render bounds already.
         surface.image_snapshot_with_bounds(&render_bounds.round_in()).unwrap()
-          .encode_to_data_with_quality(img_format, (quality*100.0) as i32)
+          .encode(&mut surface.direct_context(), img_format, (quality*100.0) as u32)
           .map(|data| with_dpi(data, img_format, density))
           .ok_or(format!("Could not encode as {}", format))
       }else{
@@ -196,10 +198,12 @@ impl Page{
       }
     }
     else if format == "pdf" {
-      let mut document = pdf_document(quality, density).begin_page(self.bounds.size().to_floor(), None);
+      let mut memory = Vec::new();
+      let mut document = pdf_document(quality, density, &mut memory).begin_page(self.bounds.size().to_ceil(), None);
       let canvas = document.canvas();
       canvas.draw_picture(&picture, None, None);
-      Ok(document.end_page().close())
+      document.end_page().close();
+      Ok(Data::new_copy(&memory))
     }
     else if format == "svg" {
       let flags = outline.then(|| Flags::CONVERT_TEXT_TO_PATHS);
@@ -241,7 +245,7 @@ impl Page{
     )
   }
 
-  fn append_to(&self, doc:Document, matte:Option<Color>) -> Result<Document, String>{
+  fn append_to<'a>(&self, doc: Document<'a>, matte:Option<Color>) -> Result<Document<'a>, String> {
     if !self.bounds.is_empty(){
       let mut doc = doc.begin_page(self.bounds.size(), None);
       let canvas = doc.canvas();
@@ -253,6 +257,7 @@ impl Page{
       Err("Width and height must be non-zero to generate a PDF page".to_string())
     }
   }
+
 }
 
 
@@ -279,10 +284,12 @@ impl PageSequence{
   }
 
   pub fn as_pdf(&self, quality:f32, density:f32, matte:Option<Color>) -> Result<Data, String>{
-    self.pages
+    let mut memory = Vec::new();
+    let mut doc = self.pages
       .iter()
-      .try_fold(pdf_document(quality, density), |doc, page| page.append_to(doc, matte))
-      .map(|doc| doc.close())
+      .try_fold(pdf_document(quality, density, &mut memory), |doc, page| page.append_to(doc, matte));
+    doc?.close();
+    Ok(Data::new_copy(&memory))
   }
 
   #[allow(clippy::too_many_arguments)]
@@ -356,12 +363,12 @@ pub fn pages_arg(cx: &mut FunctionContext, idx: i32, canvas:&BoxedCanvas) -> Neo
   Ok(PageSequence::from(pages, engine))
 }
 
-fn pdf_document(quality:f32, density:f32) -> Document{
+fn pdf_document(quality:f32, density:f32, writer:&mut impl io::Write) -> Document {
   let mut meta = pdf::Metadata::default();
   meta.producer = "Skia Canvas <https://github.com/samizdatco/skia-canvas>".to_string();
   meta.encoding_quality = Some((quality*100.0) as i32);
   meta.raster_dpi = Some(density * 72.0);
-  pdf::new_document(Some(&meta))
+  pdf::new_document(writer, Some(&meta))
 }
 
 fn with_dpi(data:Data, format:EncodedImageFormat, density:f32) -> Data{

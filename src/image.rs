@@ -4,7 +4,7 @@
 #![allow(dead_code)]
 use std::cell::RefCell;
 use neon::{prelude::*, types::buffer::TypedArray};
-use skia_safe::{Image as SkImage, ImageInfo, Size, ColorType, AlphaType, Data};
+use skia_safe::{Image as SkImage, ImageInfo, Size, ColorType, AlphaType, Data, images::raster_from_data};
 
 use crate::utils::*;
 
@@ -89,7 +89,7 @@ pub fn load_pixel_data(mut cx: FunctionContext) -> JsResult<JsBoolean> {
   let premult = if js_premult.is_some() { Some(js_premult.unwrap().value(&mut cx)) } else { Some(false) };
 
   let image_info = make_raw_image_info((width, height), premult, ctype);
-  this.image = SkImage::from_raster_data(&image_info, data, image_info.min_row_bytes());
+  this.image = raster_from_data(&image_info, data, image_info.min_row_bytes());
 
   Ok(cx.boolean(this.image.is_some()))
 }
