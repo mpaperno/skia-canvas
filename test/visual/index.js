@@ -1,7 +1,14 @@
+// Usage: node test/visual/index.js [port #] ["gpu"]
+//    ex: node test/visual/index.js 8081 gpu
+// default port is 4000
+// default GPU is off
+
 var path = require('path')
 var express = require('express')
 var {Canvas} = require('../../lib')
 var tests = require('./tests')
+
+var gpu = false;
 
 process.env.SKIA_CANVAS_DRAW_ELLIPSE_PAST_FULL_CIRCLE = "1";
 
@@ -38,6 +45,7 @@ app.get('/', function (req, res) {
 
 app.get('/render', async function (req, res, next) {
   var canvas = new Canvas(200, 200)
+  canvas.gpu = gpu;
 
   renderTest(canvas, req.query.name, async function (err) {
     if (err) return next(err)
@@ -64,7 +72,17 @@ app.get('/pdf', async function (req, res, next) {
   })
 })
 
-var port = parseInt(process.argv[2] || '4000', 10)
+var port = 4000
+var i = 2;
+if (process.argv[i]) {
+  const p = parseInt(process.argv[i], 10)
+  if (Number.isFinite(p)) {
+    port = p
+    ++i
+  }
+  if (process.argv.at(i) == "gpu")
+    gpu = true
+}
 app.listen(port, function () {
-  console.log('=> http://localhost:%d/', port)
+  console.log('=> http://localhost:%d/   GPU:', port, gpu ? "on" : "off")
 })
