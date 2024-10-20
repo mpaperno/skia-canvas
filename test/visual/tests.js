@@ -2174,6 +2174,15 @@ tests['drawImage(img) grayscale JPEG'] = function (ctx, done) {
 //   img.onerror = done
 //   img.src = imageSrc('tree.svg')
 // }
+tests['drawImage(img) webp'] = function (ctx, done) {
+  var img = new Image()
+  img.onload = function () {
+    ctx.drawImage(img, 0, 0, 200, 200)
+    done(null)
+  }
+  img.onerror = done
+  img.src = imageSrc('rose.webp')
+}
 
 // tests['drawImage(img) svg with scaling from drawImage'] = function (ctx, done) {
 //   var img = new Image()
@@ -2184,6 +2193,21 @@ tests['drawImage(img) grayscale JPEG'] = function (ctx, done) {
 //   img.onerror = done
 //   img.src = imageSrc('tree.svg')
 // }
+tests['drawImage(img) raw'] = function (ctx, done) {
+  var img = new Image({
+    raw: {
+      width: 125,
+      height: 125,
+      colorType: 'rgba'
+    }
+  })
+  img.onload = function () {
+    ctx.drawImage(img, 0, 0, 125, 125)
+    done(null)
+  }
+  img.onerror = done
+  img.src = imageSrc('pentagon.raw')
+}
 
 // tests['drawImage(img) svg with scaling from ctx'] = function (ctx, done) {
 //   var img = new Image()
