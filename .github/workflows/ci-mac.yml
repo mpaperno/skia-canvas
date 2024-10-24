@@ -1,0 +1,57 @@
+name: Run MacOS build & tests
+on:
+  workflow_dispatch:
+
+jobs:
+  run-tests:
+    name: Build & Test
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - host: macos-latest
+            arch: 'arm64'
+            target: 'aarch64-apple-darwin'
+            mac-target: '11.0'
+          - host: macos-13
+            arch: 'x64'
+            target: 'x86_64-apple-darwin'
+            mac-target: '10.14'
+        node: [ 18, 20, 22 ]
+    runs-on: ${{ matrix.settings.host }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          architecture: ${{ matrix.settings.arch }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Use Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.settings.target }}
+
+      - name: Setup toolchain
+        run: ${{ matrix.settings.setup }}
+        if: ${{ matrix.settings.setup }}
+
+      - name: Build
+        run: |
+          export MACOSX_DEPLOYMENT_TARGET=${{ matrix.settings.mac-target }}
+          export SKIA_DEBUG=0
+          cargo update
+          npm ci --ignore-scripts
+          npm run build -- --release --features=metal,window --target=${{ matrix.settings.target }}
+
+      - name: Run tests
+        run: npm test

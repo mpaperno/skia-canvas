@@ -1,0 +1,60 @@
+name: Run Linux-x64 build & tests
+on:
+  workflow_dispatch:
+
+jobs:
+
+  linux-x64:
+    name: Rebuild & Test
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [ 18, 20, 22, latest ]
+        # node: [ 22 ]
+        settings:
+          - target: 'x86_64-unknown-linux-gnu'
+            setup: >-
+              sudo apt-get update && sudo apt-get install -y --no-install-recommends fontconfig libfontconfig-dev
+          - target: 'x86_64-unknown-linux-musl'
+            setup: >-
+              sudo apt-get update && sudo apt-get install -y --no-install-recommends musl-dev musl-tools ninja-build fontconfig libfontconfig-dev libssl-dev libicu-dev &&
+              sudo ln -s "/usr/bin/g++" "/usr/bin/musl-g++" &&
+              export PATH="$HOME/.cargo/bin:/opt/rust/cargo/bin:/usr/local/musl/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH" &&
+              export PKG_CONFIG_ALLOW_CROSS=true &&
+              export PKG_CONFIG_ALL_STATIC=true &&
+              export TARGET=musl &&
+              export CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS="-C target-feature=-crt-static -C link-self-contained=yes -C linker=rust-lld -Clink-args=-L/usr/lib/x86_64-linux-musl/" &&
+              export RUSTFLAGS="-C target-feature=-crt-static" &&
+              export CFLAGS_x86_64_unknown_linux_musl="-nostdinc -nostdlib -isystem/usr/include/x86_64-linux-musl/"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # - name: Setup Python
+      #   uses: actions/setup-python@v5
+      #   with:
+      #     python-version: '3.12'
+
+      - name: Use Rust
+        # if: ${{ matrix.settings.target != 'x86_64-unknown-linux-musl' }}
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.settings.target }}
+
+      - name: Build
+        run: |
+          ${{ matrix.settings.setup }}
+          cargo update
+          npm ci --ignore-scripts
+          npm run build -- --release --features=vulkan,window,skia-safe/embed-freetype --target=${{ matrix.settings.target }}
+
+      - name: Test
+        run: npm test

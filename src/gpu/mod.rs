@@ -1,4 +1,4 @@
-use skia_safe::{ImageInfo, Surface};
+use skia_safe::{ImageInfo, Surface, surfaces};
 
 #[cfg(feature = "metal")]
 mod metal;
@@ -54,7 +54,7 @@ impl RenderingEngine{
     pub fn get_surface(&self, image_info: &ImageInfo) -> Option<Surface> {
         match self {
             Self::GPU => Engine::surface(image_info),
-            Self::CPU => Surface::new_raster(image_info, None, None)
+            Self::CPU => surfaces::raster(image_info, None, None)
         }
     }
 }

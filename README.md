@@ -206,7 +206,7 @@ The Canvas object is a stand-in for the HTML `<canvas>` element. It defines imag
 | Image Dimensions             | Rendering Contexts            | Output                                           |
 | --                           | --                            | --                                               |
 | [**width**][canvas_width]    | [**gpu**][canvas_gpu] ⚡      | ~~[**async**][canvas_async]~~  ⚡                    |
-| [**height**][canvas_height]  | [**pages**][canvas_pages] ⚡  | [**pdf**, **png**, **svg**, **jpg**, **raw**][shorthands] ⚡ |
+| [**height**][canvas_height]  | [**pages**][canvas_pages] ⚡  | [**pdf**, **png**, **svg**, **jpg**, **webp**, **raw**][shorthands] ⚡ |
 | [**size**][canvas_size]      | [getContext()][getContext]    | [saveAs()][saveAs] / [saveAsSync()][saveAs] ⚡                            |
 |                              | [newPage()][newPage] ⚡       | [toBuffer()][toBuffer] / [toBufferSync()][toBuffer] ⚡                        |
 |                              |                               | [toDataURL()][toDataURL_ext] / [toDataURLSync()][toDataURL_ext] ⚡ |
@@ -246,7 +246,7 @@ When the canvas renders images and writes them to disk, it does so in a backgrou
   - [`toDataURL()`][toDataURL_ext]
   - [`toRaw()`][toRaw]
   - [`toImageData()`][toImageData]
-  - [`.pdf`, `.svg`, `.jpg`, `.png`, `raw`][shorthands]
+  - [`.pdf`, `.svg`, `.jpg`, `.png`, `.webp`, `raw`][shorthands]
 
 
 In cases where this is not the desired behavior, you can use the synchronous equivalents for the primary export functions. They accept identical arguments to their async versions but block execution and return their values synchronously rather than wrapped in Promises. Also note that the [shorthand properties][shorthands] do not have synchronous versions:
@@ -290,7 +290,7 @@ Shorthand for the standard `width` and `height` properties (readable and settabl
 { width: number, height: number }
 ```
 
-#### `.pdf`, `.svg`, `.jpg`, `.png`, and `raw`
+#### `.pdf`, `.svg`, `.jpg`, `.png`, `.webp`, and `raw`
 
 These properties are syntactic sugar for calling the `toBuffer()` method. Each returns a [Promise][Promise] that resolves to a Node [`Buffer`][Buffer] object with the contents of the canvas in the given format. If more than one page has been added to the canvas, only the most recent one will be included unless you’ve accessed the `.pdf` property in which case the buffer will contain a multi-page PDF.
 
