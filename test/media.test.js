@@ -2,8 +2,8 @@
 
 const _ = require('lodash'),
       fs = require('fs'),
-      glob = require('glob').sync,
-      {Image, FontLibrary, loadImage} = require('../lib'),
+      path = require('path'),
+      {Canvas, Image, FontLibrary, loadImage} = require('../lib'),
       simple = require('simple-get')
 
 jest.mock('simple-get', () => {
@@ -333,7 +333,16 @@ describe("Image", () => {
 
 
 describe("FontLibrary", ()=>{
-  const findFont = font => `${__dirname}/assets/${font}`
+  let canvas, ctx
+  const findFont = font => path.join(__dirname, 'assets', font),
+      pixel = (x, y) => Array.from(ctx.getImageData(x, y, 1, 1).data),
+      WIDTH = 512, HEIGHT = 512
+
+  
+  beforeEach(() => {
+    canvas = new Canvas(WIDTH, HEIGHT)
+    ctx = canvas.getContext("2d")
+  })
 
   test("can list families", ()=>{
     let fams = FontLibrary.families,
@@ -357,13 +366,14 @@ describe("FontLibrary", ()=>{
 
     if (fam){
       let info = FontLibrary.family(fam)
+      expect(info).toBeTruthy()
       expect(info).toHaveProperty('family')
       expect(info).toHaveProperty('weights')
-      expect(typeof info.weights[0]).toBe('number');
+      expect(info && typeof info.weights[0]).toBe('number');
       expect(info).toHaveProperty('widths')
-      expect(typeof info.widths[0]).toBe('string');
+      expect(info && typeof info.widths[0]).toBe('string');
       expect(info).toHaveProperty('styles')
-      expect(typeof info.styles[0]).toBe('string');
+      expect(info && typeof info.styles[0]).toBe('string');
     }
   })
 
@@ -372,16 +382,36 @@ describe("FontLibrary", ()=>{
         name = "AmstelvarAlpha",
         alias = "PseudonymousBosch";
 
+    // with real name
     expect(() => FontLibrary.use(ttf)).not.toThrow()
     expect(FontLibrary.has(name)).toBe(true)
-    expect(FontLibrary.family(name).weights).toContain(400)
+    expect(_.get(FontLibrary.family(name), "weights")).toContain(400)
 
+    // with alias
     expect(() => FontLibrary.use(alias, ttf)).not.toThrow()
     expect(FontLibrary.has(alias)).toBe(true)
-    expect(FontLibrary.family(alias).weights).toContain(400)
+    expect(_.get(FontLibrary.family(alias), "weights")).toContain(400)
 
+    // fonts disappear after reset
     FontLibrary.reset()
     expect(FontLibrary.has(name)).toBe(false)
     expect(FontLibrary.has(alias)).toBe(false)
   })
+
+  test("can render woff2 fonts", ()=>{
+    let woff = findFont("Monoton-Regular.woff2"),
+        name = "Monoton"
+    expect(() => FontLibrary.use(woff)).not.toThrow()
+    expect(FontLibrary.has(name)).toBe(true)
+
+    ctx.font = '256px Monoton'
+    ctx.fillText('G', 128, 256)
+
+    // look for one of the gaps between the inline strokes of the G
+    let bmp = ctx.getImageData(300, 172, 1, 1)
+    expect(Array.from(bmp.data)).toEqual([0,0,0,0])
+
+    FontLibrary.reset()
+  })
+
 })
