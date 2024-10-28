@@ -42,6 +42,9 @@ objc = { version = "0.2.7", optional = true }
 # window
 winit = { version = '0.26.1', features = ["serde"], optional = true }
 
+[target.'cfg(windows)'.dependencies]
+allsorts = { version = "0.15", features = ["flate2_zlib"], default-features = false}
+
 [dependencies.neon]
 version = "0.10.1"
 default-features = false

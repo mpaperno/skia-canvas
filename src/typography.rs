@@ -21,6 +21,16 @@ use crate::FONT_LIBRARY;
 use crate::utils::*;
 use crate::context::State;
 
+#[cfg(target_os = "windows")]
+use allsorts::{
+  binary::read::ReadScope,
+  subset::whole_font,
+  tables::FontTableProvider,
+  woff::WoffFont,
+  woff2::Woff2Font,
+};
+
+
 //
 // Text layout and metrics
 //
@@ -630,7 +640,31 @@ pub fn addFamily(mut cx: FunctionContext) -> JsResult<JsValue> {
       Err(why) => {
         return cx.throw_error(format!("{}: \"{}\"", why, path.display()))
       },
-      Ok(bytes) => mgr.new_from_data(&bytes, None)
+      Ok(bytes) => {
+        #[cfg(target_os = "windows")]
+        let bytes = {
+          fn decode_woff(bytes:&Vec<u8>) -> Option<Vec<u8>>{
+            let woff = ReadScope::new(&bytes).read::<WoffFont>().ok()?;
+            let tags = woff.table_tags()?;
+            whole_font(&woff, &tags).ok()
+          }
+          
+          fn decode_woff2(bytes:&Vec<u8>) -> Option<Vec<u8>>{
+            let woff2 = ReadScope::new(&bytes).read::<Woff2Font>().ok()?;
+            let tables = woff2.table_provider(0).ok()?;
+            let tags = tables.table_tags()?;
+            whole_font(&tables, &tags).ok()
+          }
+          
+          match filename.to_ascii_lowercase(){
+            name if name.ends_with(".woff") => decode_woff(&bytes),
+            name if name.ends_with(".woff2") => decode_woff2(&bytes),
+            _ => None
+          }
+        }.unwrap_or(bytes);
+
+        mgr.new_from_data(&bytes, None)
+      }
     };
 
     match typeface {
