@@ -64,6 +64,8 @@ export interface ImageOptions {
   width?: number
   /** Image height */
   height?: number
+  /** Signals to the parser that source is in SVG format. Used when loading image source data from a buffer. */
+  type?: 'svg' | undefined
   /** Describes how to process raw image buffer with decoded pixels */
   raw?: ImageInfo | undefined
 }
