@@ -4,7 +4,8 @@
 #![allow(dead_code)]
 use std::cell::RefCell;
 use neon::{prelude::*, types::buffer::TypedArray};
-use skia_safe::{Image as SkImage, ImageInfo, Size, ColorType, AlphaType, Data, images::raster_from_data};
+use skia_safe::{Image as SkImage, ImageInfo, ColorType, AlphaType, Data};
+use skia_safe::image::images;
 
 use crate::utils::*;
 
@@ -66,7 +67,7 @@ pub fn set_data(mut cx: FunctionContext) -> JsResult<JsBoolean> {
   let buffer = cx.argument::<JsBuffer>(1)?;
   let data = Data::new_copy(buffer.as_slice(&mut cx));
 
-  this.image = SkImage::from_encoded(data);
+  this.image = images::deferred_from_encoded_data(data, None);
   Ok(cx.boolean(this.image.is_some()))
 }
 
@@ -89,7 +90,7 @@ pub fn load_pixel_data(mut cx: FunctionContext) -> JsResult<JsBoolean> {
   let premult = if js_premult.is_some() { Some(js_premult.unwrap().value(&mut cx)) } else { Some(false) };
 
   let image_info = make_raw_image_info((width, height), premult, ctype);
-  this.image = raster_from_data(&image_info, data, image_info.min_row_bytes());
+  this.image = images::raster_from_data(&image_info, data, image_info.min_row_bytes());
 
   Ok(cx.boolean(this.image.is_some()))
 }
