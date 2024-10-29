@@ -776,6 +776,13 @@ describe("Context2D", ()=>{
       expect(pixel(WIDTH*.75, HEIGHT/2)).toEqual(GREEN)
       expect(pixel(WIDTH/2, HEIGHT/2)).toEqual(CLEAR)
 
+      ctx.clearRect(0,0,WIDTH,HEIGHT)
+      ctx.drawCanvas(srcCanvas, 1,1,2,2, 0,0,2,2)
+      expect(pixel(0, 0)).toEqual(CLEAR)
+      expect(pixel(0, 1)).toEqual(GREEN)
+      expect(pixel(1, 0)).toEqual(GREEN)
+      expect(pixel(1, 1)).toEqual(GREEN)
+
       let image = await loadAsset('checkers.png')
       expect( () => ctx.drawCanvas(image, 0, 0) ).not.toThrow()
     })
