@@ -27,10 +27,10 @@ describe("Image", () => {
       URL = `https://${PATH}`,
       BUFFER = fs.readFileSync(PATH),
       DATA_URI = `data:image/png;base64,${BUFFER.toString('base64')}`,
-      FRESH = {complete:false, width:undefined, height:undefined},
-      LOADED = {complete:true, width:125, height:125},
+      FRESH = {complete:false, width:0, height:0, naturalWidth:0, naturalHeight:0},
+      LOADED = {complete:true, width:125, height:125, naturalWidth:125, naturalHeight:125},
       FORMAT = 'test/assets/image/format',
-      PARSED = {complete:true, width:60, height:60},
+      PARSED = {complete:true, width:60, height:60, naturalWidth:60, naturalHeight:60},
       img
 
   beforeEach(() => img = new Image() )
@@ -76,6 +76,14 @@ describe("Image", () => {
         done()
       }
       img.src = URL
+    })
+
+    test("set size vs natural size", () => {
+      img = new Image(50,50)
+      expect(img).toMatchObject({complete:false, width:50, height:50, naturalWidth:0, naturalHeight:0})
+      img.src = DATA_URI
+      expect(img).toMatchObject({complete:true, width:50, height:50, naturalWidth:125, naturalHeight:125})
+    })
     })
 
     test("loadImage call", async () => {
