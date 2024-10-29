@@ -31,6 +31,10 @@ describe("Image", () => {
       LOADED = {complete:true, width:125, height:125, naturalWidth:125, naturalHeight:125},
       FORMAT = 'test/assets/image/format',
       PARSED = {complete:true, width:60, height:60, naturalWidth:60, naturalHeight:60},
+      SVG_PATH = `${FORMAT}.svg`,
+      SVG_URL = `https://${SVG_PATH}`,
+      SVG_BUFFER = fs.readFileSync(SVG_PATH),
+      SVG_DATA_URI = `data:image/svg;base64,${SVG_BUFFER.toString('base64')}`,
       img
 
   beforeEach(() => img = new Image() )
@@ -83,7 +87,27 @@ describe("Image", () => {
       expect(img).toMatchObject({complete:false, width:50, height:50, naturalWidth:0, naturalHeight:0})
       img.src = DATA_URI
       expect(img).toMatchObject({complete:true, width:50, height:50, naturalWidth:125, naturalHeight:125})
+
+      const svgImage = new Image({ type: 'svg' })
+      expect(svgImage).toMatchObject(FRESH)
+      svgImage.src = SVG_BUFFER
+      expect(svgImage).toMatchObject(PARSED)
     })
+
+    test("SVG data uri", () => {
+      expect(img).toMatchObject(FRESH)
+      img.src = SVG_DATA_URI
+      expect(img).toMatchObject(PARSED)
+    })
+
+    test("SVG http", done => {
+      expect(img).toMatchObject(FRESH)
+      img.onload = loaded => {
+        expect(loaded).toBe(img)
+        expect(img).toMatchObject(PARSED)
+        done()
+      }
+      img.src = SVG_URL
     })
 
     test("loadImage call", async () => {
@@ -100,6 +124,9 @@ describe("Image", () => {
 
       img = await loadImage(PATH)
       expect(img).toMatchObject(LOADED)
+
+      img = await loadImage(SVG_PATH)
+      expect(img).toMatchObject(PARSED)
 
       img = await loadImage(PATH.replace('.png', '.raw'), {
         raw: {
@@ -217,6 +244,11 @@ describe("Image", () => {
 
     test("WEBP", () => {
       img.src = FORMAT + '.webp'
+      expect(img).toMatchObject(PARSED)
+    })
+
+    test("SVG", () => {
+      img.src = FORMAT + '.svg'
       expect(img).toMatchObject(PARSED)
     })
   })
