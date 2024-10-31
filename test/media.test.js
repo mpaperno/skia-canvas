@@ -226,7 +226,7 @@ describe("Image", () => {
           content = fs.readFileSync(path).toString('base64')
       return `data:${mime};base64,${content}`
     }
-    
+
     test("PNG", () => {
       img.src = FORMAT + '.png'
       expect(img).toMatchObject(PARSED)
@@ -327,6 +327,7 @@ describe("Image", () => {
     test("set to non-positive/integer values", () => {
       img = new Image(-1, 22.4)
       compareSizes(img, sizeBefore(0, 22), sizeAfter(0, 22))
+    })
   })
 })
 
