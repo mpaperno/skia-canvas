@@ -55,21 +55,33 @@ impl CanvasPattern{
 
 pub fn from_image(mut cx: FunctionContext) -> JsResult<BoxedCanvasPattern> {
   let src = cx.argument::<BoxedImage>(1)?;
-  let repetition = if cx.len() > 2 && cx.argument::<JsValue>(2)?.is_a::<JsNull, _>(&mut cx){
+  let repetition = if cx.len() > 3 && cx.argument::<JsValue>(3)?.is_a::<JsNull, _>(&mut cx){
     "".to_string() // null is a valid synonym for "repeat" (as is "")
   }else{
-    string_arg(&mut cx, 2, "repetition")?
+    string_arg(&mut cx, 3, "repetition")?
   };
 
   if let Some(repeat) = to_repeat_mode(&repetition){
     let src = src.borrow();
-    let dims = src.size();
+    let dims = Size::from_isize(src.image_size());
+    let mut matrix = Matrix::new_identity();
+
+    if src.adjust_size_to_canvas && !dims.is_empty() {
+      // If this flag is set (for SVG images with no intrinsic size) then we need to scale the image to
+      // the canvas' smallest dimension. This preserves compatibility with how Chromium browsers behave.
+      let ctx = cx.argument::<BoxedContext2D>(2)?;
+      let bounds = ctx.borrow().bounds.size();
+      let min_size = f32::min(bounds.width, bounds.height);
+      let factor = (min_size / dims.width, min_size / dims.height);
+      matrix.set_scale(factor, None);
+    }
+
     let stamp = Stamp{
       image:src.image.clone(),
-      pict:None,
+      pict:src.picture.clone(),
       dims,
       repeat,
-      matrix:Matrix::new_identity()
+      matrix
     };
     let stamp = Arc::new(Mutex::new(stamp));
     Ok(cx.boxed(RefCell::new(CanvasPattern{stamp})))
