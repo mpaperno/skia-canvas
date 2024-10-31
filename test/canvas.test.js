@@ -243,7 +243,7 @@ describe("Canvas", ()=>{
 
       await canvas.saveAs(`${TMP}/output-{2}.png`)
 
-      let files = findTmp(`/output-0?.png`)
+      let files = findTmp(`/output-0?.png`).sort()
       expect(files.length).toEqual(colors.length+1)
 
       files.forEach((fn, i) => {
@@ -424,7 +424,7 @@ describe("Canvas", ()=>{
 
       canvas.saveAsSync(`${TMP}/output-{2}.png`)
 
-      let files = findTmp(`/output-0?.png`)
+      let files = findTmp(`/output-0?.png`).sort()
       expect(files.length).toEqual(colors.length+1)
 
       files.forEach((fn, i) => {
