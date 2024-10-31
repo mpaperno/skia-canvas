@@ -82,18 +82,11 @@ describe("Image", () => {
       img.src = URL
     })
 
-    test("set size vs natural size", () => {
-      img = new Image(50,50)
-      expect(img).toMatchObject({complete:false, width:50, height:50, naturalWidth:0, naturalHeight:0})
-      img.src = DATA_URI
-      expect(img).toMatchObject({complete:true, width:50, height:50, naturalWidth:125, naturalHeight:125})
 
       const svgImage = new Image({ type: 'svg' })
       expect(svgImage).toMatchObject(FRESH)
       svgImage.src = SVG_BUFFER
       expect(svgImage).toMatchObject(PARSED)
-    })
-
     test("SVG data uri", () => {
       expect(img).toMatchObject(FRESH)
       img.src = SVG_DATA_URI
@@ -250,6 +243,53 @@ describe("Image", () => {
     test("SVG", () => {
       img.src = FORMAT + '.svg'
       expect(img).toMatchObject(PARSED)
+    })
+  })
+
+  describe("size can be", () => {
+    const sizeBefore = (width, height) => ({width, height, complete:false, naturalWidth:0, naturalHeight:0})
+    const sizeAfter = (width, height) => ({width, height, complete:true, naturalWidth:125, naturalHeight:125})
+    const compareSizes = (img, before, after) => {
+      expect(img).toMatchObject(before)
+      img.src = DATA_URI
+      expect(img).toMatchObject(after)
+    }
+
+    test("different from natural size", () => {
+      img = new Image(50, 50)
+      compareSizes(img, sizeBefore(50, 50), sizeAfter(50, 50))
+    })
+
+    test("set with just width or just height", () => {
+      // no custom size
+      img = new Image()
+      compareSizes(img, sizeBefore(0,0), sizeAfter(125, 125))
+
+      // just width
+      img = new Image(50)
+      compareSizes(img, sizeBefore(50, 0), sizeAfter(50, 125))
+
+      // just height
+      img = new Image(undefined, 50)
+      compareSizes(img, sizeBefore(0, 50), sizeAfter(125, 50))
+    })
+
+    test("set to NaN without error", () => {
+      img = new Image(NaN, NaN)
+      compareSizes(img, sizeBefore(0, 0), sizeAfter(0, 0))
+    })
+
+    test("set to non-numbers without error", () => {
+      img = new Image(25, 'frobozz')
+      compareSizes(img, sizeBefore(25, 0), sizeAfter(25, 0))
+
+      img = new Image({}, 25)
+      compareSizes(img, sizeBefore(0, 25), sizeAfter(0, 25))
+    })
+
+    test("set to non-positive/integer values", () => {
+      img = new Image(-1, 22.4)
+      compareSizes(img, sizeBefore(0, 22), sizeAfter(0, 22))
     })
   })
 })
