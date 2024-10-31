@@ -39,7 +39,7 @@ describe("Image", () => {
 
   beforeEach(() => img = new Image() )
 
-  describe("can be initialized from", () => {
+  describe("can initialize bitmaps from", () => {
     test("buffer", () => {
       expect(img).toMatchObject(FRESH)
       img.src = BUFFER
@@ -82,27 +82,6 @@ describe("Image", () => {
       img.src = URL
     })
 
-
-      const svgImage = new Image({ type: 'svg' })
-      expect(svgImage).toMatchObject(FRESH)
-      svgImage.src = SVG_BUFFER
-      expect(svgImage).toMatchObject(PARSED)
-    test("SVG data uri", () => {
-      expect(img).toMatchObject(FRESH)
-      img.src = SVG_DATA_URI
-      expect(img).toMatchObject(PARSED)
-    })
-
-    test("SVG http", done => {
-      expect(img).toMatchObject(FRESH)
-      img.onload = loaded => {
-        expect(loaded).toBe(img)
-        expect(img).toMatchObject(PARSED)
-        done()
-      }
-      img.src = SVG_URL
-    })
-
     test("loadImage call", async () => {
       expect(img).toMatchObject(FRESH)
 
@@ -131,6 +110,37 @@ describe("Image", () => {
       expect(img).toMatchObject(LOADED)
 
       expect(async () => { await loadImage('http://nonesuch') }).rejects.toEqual("HTTP_ERROR_404")
+    })
+  })
+
+  describe("can initialize SVGs from", () => {
+    test("buffer", () => {
+      const svgImage = new Image({ type: 'svg' })
+      expect(svgImage).toMatchObject(FRESH)
+      svgImage.src = SVG_BUFFER
+      expect(svgImage).toMatchObject(PARSED)
+    })
+
+    test("data uri", () => {
+      expect(img).toMatchObject(FRESH)
+      img.src = SVG_DATA_URI
+      expect(img).toMatchObject(PARSED)
+    })
+
+    test("local file", () => {
+      expect(img).toMatchObject(FRESH)
+      img.src = SVG_PATH
+      expect(img).toMatchObject(PARSED)
+    })
+
+    test("http url", done => {
+      expect(img).toMatchObject(FRESH)
+      img.onload = loaded => {
+        expect(loaded).toBe(img)
+        expect(img).toMatchObject(PARSED)
+        done()
+      }
+      img.src = SVG_URL
     })
   })
 
@@ -280,9 +290,11 @@ describe("Image", () => {
     })
 
     test("set to non-numbers without error", () => {
+      // @ts-ignore
       img = new Image(25, 'frobozz')
       compareSizes(img, sizeBefore(25, 0), sizeAfter(25, 0))
 
+      // @ts-ignore
       img = new Image({}, 25)
       compareSizes(img, sizeBefore(0, 25), sizeAfter(0, 25))
     })
@@ -290,7 +302,6 @@ describe("Image", () => {
     test("set to non-positive/integer values", () => {
       img = new Image(-1, 22.4)
       compareSizes(img, sizeBefore(0, 22), sizeAfter(0, 22))
-    })
   })
 })
 
