@@ -11,7 +11,6 @@ use skia_safe::svg;
 use skia_safe::wrapper::PointerWrapper;  // for SVG Dom access, temporary until next skia-safe update
 
 use crate::utils::*;
-use crate::FONT_LIBRARY;
 
 
 pub type BoxedImage = JsBox<RefCell<Image>>;
@@ -19,7 +18,8 @@ impl Finalize for Image {}
 
 pub struct Image{
   src:String,
-  size:ISize,
+  width:Option<i32>,
+  height:Option<i32>,
   pub adjust_size_to_canvas:bool,
   pub image:Option<SkImage>,
   pub picture:Option<Picture>
@@ -42,15 +42,11 @@ impl Image{
   }
 
   pub fn size(&self) -> ISize {
-    let mut size = self.size.clone();
-    let img_size = self.image_size();
-    if size.width < 0 {
-      size.width = img_size.width;
+    let actual_size = self.image_size();
+    ISize{
+      width: self.width.unwrap_or(actual_size.width),
+      height: self.height.unwrap_or(actual_size.height),
     }
-    if size.height < 0 {
-      size.height = img_size.height;
-    }
-    size
   }
 
 }
@@ -62,7 +58,7 @@ impl Image{
 pub fn new(mut cx: FunctionContext) -> JsResult<BoxedImage> {
   let this = RefCell::new(Image{
     src:"".to_string(),
-    size:ISize::new(-1,-1),
+    width:None, height:None,
     adjust_size_to_canvas:false,
     image:None,
     picture:None,
@@ -104,8 +100,8 @@ pub fn load_svg(mut cx: FunctionContext) -> JsResult<JsBoolean> {
   let buffer = cx.argument::<JsBuffer>(1)?;
   let data = Data::new_copy(buffer.as_slice(&mut cx));
 
-  // We need an instance of a FontMgr for the DOM loader to use when parsing fonts in the SVG.  // TODO: Is this right?
-  let mgr = FONT_LIBRARY.lock().unwrap().collection.fallback_manager().unwrap_or(FontMgr::default());
+  // We need an instance of a FontMgr for the DOM loader to use when parsing fonts in the SVG.
+  let mgr = FontMgr::default();
   // Parse & load the SVG data.
   let dom = svg::Dom::from_bytes(&data, mgr);
   if !dom.is_ok() {
@@ -195,9 +191,8 @@ pub fn get_width(mut cx: FunctionContext) -> JsResult<JsValue> {
 pub fn set_width(mut cx: FunctionContext) -> JsResult<JsUndefined> {
   let this = cx.argument::<BoxedImage>(0)?;
   let mut this = this.borrow_mut();
-  if let Some(num) = opt_float_arg(&mut cx, 1){
-    this.size.width = i32::max(0, num as i32);
-  }
+  let num = float_arg_or(&mut cx, 1, 0.0);
+  this.width = Some(num.max(0.0) as i32);
   Ok(cx.undefined())
 }
 
@@ -210,9 +205,8 @@ pub fn get_height(mut cx: FunctionContext) -> JsResult<JsValue> {
 pub fn set_height(mut cx: FunctionContext) -> JsResult<JsUndefined> {
   let this = cx.argument::<BoxedImage>(0)?;
   let mut this = this.borrow_mut();
-  if let Some(num) = opt_float_arg(&mut cx, 1){
-    this.size.height = i32::max(0, num as i32);
-  }
+  let num = float_arg_or(&mut cx, 1, 0.0);
+  this.height = Some(num.max(0.0) as i32);
   Ok(cx.undefined())
 }
 
