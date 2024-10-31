@@ -70,8 +70,6 @@ export interface ImageOptions {
   raw?: ImageInfo | undefined
 }
 
-export function loadImage(src: string | Buffer, options?: ImageOptions): Promise<Image>
-
 export class Image {
   constructor(width?: number, height?: number)
   constructor(options: ImageOptions)
@@ -83,9 +81,13 @@ export class Image {
   set height(h:number)
   get naturalWidth(): number
   get naturalHeight(): number
-  onload: ((this: Image, image: Image) => any) | null;
-  onerror: ((this: Image, error: Error) => any) | null;
+  get complete(): boolean
+  decode(): Promise<Image>
+  onload: ((this: Image, image: Image) => any) | null
+  onerror: ((this: Image, error: Error) => any) | null
 }
+
+export function loadImage(src: string | Buffer, options?: ImageOptions): Promise<Image>
 
 /** Extended ImageDataSettings for the extended ImageData type. */
 export interface ImageDataSettings extends globalThis.ImageDataSettings {
@@ -117,10 +119,10 @@ export function colorTypeBytesPerPixel(colorType: ColorType): number
 //
 
 type FixedLenArray<T, L extends number> = T[] & { length: L };
-type MatrixArgument = [DOMMatrix] | [{ a: number, b: number, c: number, d: number, e: number, f: number }] | FixedLenArray<number, 6> | FixedLenArray<number, 16> | [FixedLenArray<number, 6>] | [FixedLenArray<number, 16>]
+type Matrix = DOMMatrix | { a: number, b: number, c: number, d: number, e: number, f: number } | FixedLenArray<number, 6> | FixedLenArray<number, 16>
 
 export class DOMMatrix extends globalThis.DOMMatrix {
-  constructor(matrix: MatrixArgument)
+  constructor(matrix: Matrix)
   clone(): DOMMatrix
 }
 
@@ -205,6 +207,7 @@ export class Canvas {
   get svg(): Promise<Buffer>
   get jpg(): Promise<Buffer>
   get png(): Promise<Buffer>
+  get webp(): Promise<Buffer>
   get raw(): Promise<Buffer>
 }
 
@@ -212,8 +215,9 @@ export class Canvas {
 // CanvasPattern
 //
 
-export class CanvasPattern extends globalThis.CanvasPattern {
-  setTransform(...args: MatrixArgument): void;
+export class CanvasPattern {
+  setTransform(transform: Matrix): void;
+  setTransform(a: number, b: number, c: number, d: number, e: number, f: number): void
 }
 
 //
@@ -265,6 +269,8 @@ type QuadOrRect = [x1:number, y1:number, x2:number, y2:number, x3:number, y3:num
 
 type CornerRadius = number | DOMPoint
 
+interface CanvasTransform extends Omit<globalThis.CanvasTransform, "transform" | "setTransform">{}
+
 export interface CanvasRenderingContext2D extends CanvasCompositing, CanvasDrawImage, CanvasDrawPath, CanvasFillStrokeStyles, CanvasFilters, CanvasImageData, CanvasImageSmoothing, CanvasPath, CanvasPathDrawingStyles, CanvasRect, CanvasShadowStyles, CanvasState, CanvasText, CanvasTextDrawingStyles, CanvasTransform, CanvasUserInterface {
   readonly canvas: Canvas;
   fontVariant: string;
@@ -273,11 +279,15 @@ export interface CanvasRenderingContext2D extends CanvasCompositing, CanvasDrawI
   lineDashMarker: Path2D | null;
   lineDashFit: "move" | "turn" | "follow";
 
+  setTransform(transform?: Matrix): void
+  setTransform(a: number, b: number, c: number, d: number, e: number, f: number): void
+
+  transform(transform?: Matrix): void
+  transform(a: number, b: number, c: number, d: number, e: number, f: number): void
+
   get currentTransform(): DOMMatrix
-  set currentTransform(matrix: MatrixArgument)
+  set currentTransform(matrix: Matrix)
   createProjection(quad: QuadOrRect, basis?: QuadOrRect): DOMMatrix
-  transform(...args: MatrixArgument): void;
-  setTransform(...args: MatrixArgument): void;
 
   conicCurveTo(cpx: number, cpy: number, x: number, y: number, weight: number): void
   roundRect(x: number, y: number, width: number, height: number, radii: number | CornerRadius[]): void
@@ -334,7 +344,8 @@ export class Path2D extends globalThis.Path2D {
   points(step?: number): readonly [x: number, y: number][]
   round(radius: number): Path2D
   simplify(rule?: "nonzero" | "evenodd"): Path2D
-  transform(...args: MatrixArgument): Path2D;
+  transform(transform: Matrix): Path2D;
+  transform(a: number, b: number, c: number, d: number, e: number, f: number): Path2D;
   trim(start: number, end: number, inverted?: boolean): Path2D;
   trim(start: number, inverted?: boolean): Path2D;
 
