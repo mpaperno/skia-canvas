@@ -4,7 +4,7 @@
 #![allow(non_snake_case)]
 #![allow(dead_code)]
 use std::cell::RefCell;
-use std::f32::consts::PI;
+use std::f32::{EPSILON, consts::PI};
 use neon::prelude::*;
 use once_cell::sync::Lazy;
 use skia_safe::{Path, Point, PathDirection::{CW, CCW}, Rect, RRect, Matrix, PathOp, StrokeRec,};
@@ -55,7 +55,7 @@ impl Path2D{
     //  even if it wraps around more than 360 degrees. We also respect the directionality.
     // When disabled, preserves "standard" behavior of always stopping at a full circle. See further notes below.
 
-    if sweep_deg >= 359.9999  {
+    if sweep_deg >= 360.0 - EPSILON {
       if *DRAW_ELLIPSE_PAST_FULL_CIRCLE {
         // This following way leaves the path position where the user specified, even it it wraps around more than
         // a full circle. In this case it will also create the "extra" path segments, essentialy overlapping the path again.
@@ -78,7 +78,7 @@ impl Path2D{
       return;
     }
 
-    if sweep_deg <= -359.9999 {
+    if sweep_deg <= -360.0 + EPSILON {
       // Same notes as above apply here.
       if *DRAW_ELLIPSE_PAST_FULL_CIRCLE {
         let mut part = -180.0;
