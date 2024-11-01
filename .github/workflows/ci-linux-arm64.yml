@@ -102,7 +102,7 @@ jobs:
             echo
             echo "====== BUILD ====== "
             echo
-            npm run build -- --release --features=vulkan,window,skia-safe/embed-freetype --target=${target}
+            npm run build -- --release --features=vulkan,window,skia-safe/embed-freetype,skia-safe/freetype-woff2 --target=${target}
             echo
             echo "====== TEST ====== "
             echo
