@@ -14,6 +14,8 @@ if (typeof module !== 'undefined' && module.exports) {
   DOMMatrix = skCanvas.DOMMatrix
   Canvas = skCanvas.Canvas
   imageSrc = function (filename) { return require('path').join(__dirname, '../assets', filename) }
+  skCanvas.FontLibrary.use(imageSrc("Monoton-Regular.woff2"))
+  // console.log(skCanvas.FontLibrary.has("Monoton"))
 } else {
   // @ts-expect-error We are creating a tests propery
   window.tests = tests
@@ -1374,6 +1376,18 @@ tests['font family Impact'] = function (ctx) {
   ctx.font = '18px Impact'
   ctx.textAlign = 'center'
   ctx.fillText('18px Impact', 100, 100)
+}
+
+tests['use custom font'] = function (ctx) {
+  ctx.strokeStyle = '#666'
+  ctx.strokeRect(0, 0, 200, 200)
+  ctx.lineTo(0, 100)
+  ctx.lineTo(200, 100)
+  ctx.stroke()
+
+  ctx.font = '26px Monoton'
+  ctx.textAlign = 'center'
+  ctx.fillText('Monoton', 100, 100)
 }
 
 tests['font family invalid'] = function (ctx) {
