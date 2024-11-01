@@ -71,7 +71,7 @@ impl Typesetter{
 
   pub fn layout(&self, paint:&Paint) -> (Paragraph, Point) {
     let mut char_style = self.char_style.clone();
-    char_style.set_foreground_paint(&paint.clone());
+    char_style.set_foreground_paint(paint);
 
     let mut paragraph_builder = ParagraphBuilder::new(&self.graf_style, &self.typefaces);
     paragraph_builder.push_style(&char_style);
@@ -159,7 +159,7 @@ impl Typesetter{
 //
 // Font argument packing & unpacking
 //
-
+#[derive(Debug)]
 pub struct FontSpec{
   families: Vec<String>,
   size: f32,
@@ -479,13 +479,17 @@ impl FontLibrary{
     }
     self.fonts.push((font, alias));
 
+    let sys_mgr = FontMgr::new();
+    let default_fam = sys_mgr.legacy_make_typeface(None, FontStyle::default())
+      .map(|f| f.family_name());
+
     let mut assets = TypefaceFontProvider::new();
     for (font, alias) in &self.fonts {
       assets.register_typeface(font.clone(), alias.as_deref());
     }
 
     let mut collection = FontCollection::new();
-    collection.set_default_font_manager(FontMgr::new(), None);
+    collection.set_default_font_manager(sys_mgr, default_fam.as_deref());
     collection.set_asset_font_manager(Some(assets.into()));
     self.collection = collection;
     self.collection_cache.drain();
@@ -494,23 +498,23 @@ impl FontLibrary{
   pub fn update_style(&mut self, orig_style:&TextStyle, spec: &FontSpec) -> Option<TextStyle>{
     let mut style = orig_style.clone();
 
-    // don't update the style if no usable family names were specified
-    let matches = self.collection.find_typefaces(&spec.families, spec.style);
-    if matches.is_empty(){
-      return None
-    }
-
-    style.set_font_style(spec.style);
-    style.set_font_families(&spec.families);
-    style.set_font_size(spec.size);
-    style.set_height(spec.leading / spec.size);
-    style.set_height_override(true);
-    style.set_typeface(matches[0].clone());
-    style.reset_font_features();
-    for (feat, val) in &spec.features{
-      style.add_font_feature(feat, *val);
-    }
-    Some(style)
+    // only update the style if a usable family name was specified
+    self.collection
+      .find_typefaces(&spec.families, spec.style)
+      .into_iter().nth(0)
+      .map(|typeface| {
+        style.set_typeface(typeface);
+        style.set_font_families(&spec.families);
+        style.set_font_style(spec.style);
+        style.set_font_size(spec.size);
+        style.set_height(spec.leading / spec.size);
+        style.set_height_override(true);
+        style.reset_font_features();
+        for (feat, val) in &spec.features{
+          style.add_font_feature(feat, *val);
+        }
+        style
+      })
   }
 
   pub fn update_features(&mut self, orig_style:&TextStyle, features: &[(String, i32)]) -> TextStyle{
@@ -619,13 +623,14 @@ pub fn addFamily(mut cx: FunctionContext) -> JsResult<JsValue> {
   let filenames = cx.argument::<JsArray>(2)?.to_vec(&mut cx)?;
   let results = JsArray::new(&mut cx, filenames.len() as u32);
 
+  let mgr = FontMgr::new();
   for (i, filename) in strings_in(&mut cx, &filenames).iter().enumerate(){
     let path = Path::new(&filename);
     let typeface = match fs::read(path){
       Err(why) => {
         return cx.throw_error(format!("{}: \"{}\"", why, path.display()))
       },
-      Ok(bytes) => FontMgr::new().new_from_data(&bytes, None)
+      Ok(bytes) => mgr.new_from_data(&bytes, None)
     };
 
     match typeface {
