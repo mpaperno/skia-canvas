@@ -17,7 +17,12 @@ jobs:
             arch: 'x64'
             target: 'x86_64-apple-darwin'
             mac-target: '10.14'
-        node: [ 18, 20, 22 ]
+        node: [
+            16,
+            18,
+            20,
+            latest
+          ]
     runs-on: ${{ matrix.settings.host }}
 
     steps:

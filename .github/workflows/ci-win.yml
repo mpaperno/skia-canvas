@@ -9,7 +9,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: [ 18, 20, 22, latest ]
+        node: [
+            16,
+            18,
+            20,
+            latest
+          ]
 
     steps:
       - name: Checkout repository
