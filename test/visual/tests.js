@@ -308,7 +308,15 @@ tests['quadraticCurveTo()'] = function (ctx) {
   ctx.stroke()
 }
 
-/** @param {skCanvas.CanvasRenderingContext2D} ctx */
+/**
+    @param {skCanvas.CanvasRenderingContext2D} ctx
+    @param {{
+      scl?: number
+      offset?: number
+      len?: number
+      cb?: ((a:number,b:number,c:number,d:number) => void) | null
+    }} options
+*/
 function drawPinwheel(ctx, {scl = 1, offset = 25, len = 65, cb = null} = {}) {
   ctx.translate(100, 100)
   ctx.scale(scl, scl)
@@ -331,14 +339,14 @@ tests['transform()'] = function (ctx) {
 
 /** @param {skCanvas.CanvasRenderingContext2D} ctx */
 tests['transform() with DOMMatrix'] = function (ctx) {
-  if (!isWeb)
-    drawPinwheel(ctx, { scl: .5, offset: 0, len:100, cb: (a,b,c,d) => ctx.transform(new DOMMatrix([a,b,c,d, 0, 0])) })
+  const cb = isWeb ? null : (a,b,c,d) => ctx.transform(new DOMMatrix([a,b,c,d, 0, 0]))
+  drawPinwheel(ctx, { scl: .5, offset: 0, len:100, cb })
 }
 
 /** @param {skCanvas.CanvasRenderingContext2D} ctx */
 tests['transform() with matrix-like object'] = function (ctx) {
-  if (!isWeb)
-    drawPinwheel(ctx, { scl: .5, offset: 0, len:100, cb: (a,b,c,d) => ctx.transform({a: a, b: b, c: c, d: d, e: 0, f: 0}) })
+  const cb = isWeb ? null : (a,b,c,d) => ctx.transform({a: a, b: b, c: c, d: d, e: 0, f: 0} )
+  drawPinwheel(ctx, { scl: .5, offset: 0, len:100, cb })
 }
 
 tests['rotate()'] = function (ctx) {
@@ -2341,7 +2349,7 @@ tests['drawCanvas(img,sx,sy,sw,sh,x,y,w,h)'] = function (ctx, done) {
     ctx.drawCanvas(srcCtx.canvas, 13, 13, 45, 45, 25, 25, img.width / 2, img.height / 2)
     done(null)
   }
-  img.onerror = (e) => { console.log(e); done(e); }
+  img.onerror = done
   img.src = imageSrc('state.png')
 }
 
@@ -2535,7 +2543,6 @@ tests['SVG no natural size drawImage(img,sx,sy,sw,sh,x,y,w,h)'] = function (ctx,
   var img = new Image(150,150)
   img.onload = function () {
     ctx.drawImage(img, 0, 0, img.width / 2, img.height / 2, 0, 0, img.width / 2, img.height / 2)
-    console.log(this.width, this.height, this.naturalWidth, this.naturalHeight)
     done(null)
   }
   img.onerror = done
@@ -3171,4 +3178,50 @@ tests['transformed drawimage'] = function (ctx) {
   ctx.fillRect(5, 5, 50, 50)
   ctx.transform(1.2, 1, 1.8, 1.3, 0, 0)
   ctx.drawImage(ctx.canvas, 0, 0)
+}
+
+function drawCanvasTest(ctx, done, asRaster) {
+  if (Canvas) {
+    const srcCtx = new Canvas(10, 10).getContext('2d');
+    srcCtx.font = 'italic 12px Arial'
+    srcCtx.fillText("&", 2, 8);
+    if (asRaster)
+      ctx.drawImage(srcCtx.canvas, 0, 0, ctx.canvas.width, ctx.canvas.height)
+    else
+      ctx.drawCanvas(srcCtx.canvas, 0, 0, ctx.canvas.width, ctx.canvas.height)
+    done(null)
+  }
+  else {
+    if (asRaster) {
+      const srcCtx = Object.assign(document.createElement('canvas'), {width: 10, height: 10, hidden: true})?.getContext('2d')
+      if (!srcCtx)
+        return done(null)
+      srcCtx.font = 'italic 12px Arial'
+      srcCtx.fillText("&", 2, 8)
+      srcCtx.canvas.toBlob((data) => {
+        if (!data)
+          return done(null)
+        const img = document.createElement("img");
+        img.onload = function() {
+          ctx.drawImage(img, 0, 0, ctx.canvas.width, ctx.canvas.height)
+          done(null)
+        }
+        img.src = URL.createObjectURL(data)
+      }, 'image/png', 1.0)
+    }
+    else {
+      // rough approximation
+      ctx.font = 'italic 242px Arial'
+      ctx.fillText("&", 39, 170)
+      done(null)
+    }
+  }
+}
+
+tests['draw Canvas as raster with scale up'] = function (ctx, done) {
+  drawCanvasTest(ctx, done, true)
+}
+
+tests['draw Canvas as vectors with scale up'] = function (ctx, done) {
+  drawCanvasTest(ctx, done, false)
 }
