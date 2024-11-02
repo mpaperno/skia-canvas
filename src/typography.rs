@@ -181,10 +181,10 @@ pub struct FontSpec{
 }
 
 pub fn font_arg(cx: &mut FunctionContext, idx: i32) -> NeonResult<Option<FontSpec>> {
-  let arg = cx.argument::<JsValue>(idx)?;
+  let arg = cx.argument::<JsValue>(idx as usize)?;
   if arg.is_a::<JsNull, _>(cx){ return Ok(None) }
 
-  let font_desc = cx.argument::<JsObject>(idx)?;
+  let font_desc = cx.argument::<JsObject>(idx as usize)?;
   let families = strings_at_key(cx, &font_desc, "family")?;
   let canonical = string_for_key(cx, &font_desc, "canonical")?;
   let variant = string_for_key(cx, &font_desc, "variant")?;
@@ -631,7 +631,7 @@ pub fn family(mut cx: FunctionContext) -> JsResult<JsValue> {
 pub fn addFamily(mut cx: FunctionContext) -> JsResult<JsValue> {
   let alias = opt_string_arg(&mut cx, 1);
   let filenames = cx.argument::<JsArray>(2)?.to_vec(&mut cx)?;
-  let results = JsArray::new(&mut cx, filenames.len() as u32);
+  let results = JsArray::new(&mut cx, filenames.len() as usize);
 
   let mgr = FontMgr::new();
   for (i, filename) in strings_in(&mut cx, &filenames).iter().enumerate(){
@@ -648,14 +648,14 @@ pub fn addFamily(mut cx: FunctionContext) -> JsResult<JsValue> {
             let tags = woff.table_tags()?;
             whole_font(&woff, &tags).ok()
           }
-          
+
           fn decode_woff2(bytes:&Vec<u8>) -> Option<Vec<u8>>{
             let woff2 = ReadScope::new(&bytes).read::<Woff2Font>().ok()?;
             let tables = woff2.table_provider(0).ok()?;
             let tags = tables.table_tags()?;
             whole_font(&tables, &tags).ok()
           }
-          
+
           match filename.to_ascii_lowercase(){
             name if name.ends_with(".woff") => decode_woff(&bytes),
             name if name.ends_with(".woff2") => decode_woff2(&bytes),

@@ -46,9 +46,8 @@ winit = { version = '0.26.1', features = ["serde"], optional = true }
 allsorts = { version = "0.15", features = ["flate2_zlib"], default-features = false}
 
 [dependencies.neon]
-version = "0.10.1"
-default-features = false
-features = ["napi-6", "promise-api", "task-api"]
+version = "1.0"
+features = ["napi-6"]
 
 [patch."https://github.com/aclysma/skulpin"]
 skulpin = { git = "https://github.com/mpaperno/skulpin.git", branch = "mp/v0.15.0" }

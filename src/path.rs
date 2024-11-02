@@ -559,7 +559,7 @@ pub fn edges(mut cx: FunctionContext) -> JsResult<JsArray> {
 
     if let Some(edge) = from_verb(verb){
       let cmd = cx.string(edge);
-      let segment = JsArray::new(&mut cx, 1 + points.len() as u32);
+      let segment = JsArray::new(&mut cx, 1 + points.len() as usize);
       segment.set(&mut cx, 0, cmd)?;
 
       let at_point = if points.len()>1{ 1 }else{ 0 };
@@ -580,7 +580,7 @@ pub fn edges(mut cx: FunctionContext) -> JsResult<JsArray> {
     }
   }
 
-  let verbs = JsArray::new(&mut cx, edges.len() as u32);
+  let verbs = JsArray::new(&mut cx, edges.len() as usize);
   for (i, segment) in edges.iter().enumerate(){
     verbs.set(&mut cx, i as u32, *segment)?;
   }
