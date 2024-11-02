@@ -9,9 +9,8 @@ use std::ops::Range;
 use std::path::Path;
 use std::collections::HashMap;
 use neon::prelude::*;
-use neon::result::Throw;
 
-use skia_safe::{Font, FontMgr, FontMetrics, FontArguments, Typeface, Data, Paint, Point, Rect, Path as SkPath};
+use skia_safe::{Font, FontMgr, FontMetrics, FontArguments, Typeface, Paint, Point, Rect, Path as SkPath};
 use skia_safe::font_style::{FontStyle, Weight, Width, Slant};
 use skia_safe::font_arguments::{VariationPosition, variation_position::Coordinate};
 use skia_safe::textlayout::{FontCollection, TypefaceFontProvider, TextStyle, TextAlign,
@@ -400,6 +399,7 @@ impl CollectionKey{
 //
 
 pub struct FontLibrary{
+  pub mgr: FontMgr,
   pub fonts: Vec<(Typeface, Option<String>)>,
   pub collection: FontCollection,
   collection_cache: HashMap<CollectionKey, FontCollection>,
@@ -414,13 +414,13 @@ impl FontLibrary{
     let fonts = vec![];
     let collection_cache = HashMap::new();
     let mut collection = FontCollection::new();
-    collection.set_default_font_manager(FontMgr::new(), None);
-    Mutex::new(FontLibrary{ collection, collection_cache, fonts })
+    let mgr = FontMgr::default();
+    collection.set_default_font_manager(mgr.clone(), None);
+    Mutex::new(FontLibrary{ mgr, collection, collection_cache, fonts })
   }
 
   fn families(&self) -> Vec<String>{
-    let font_mgr = FontMgr::new();
-    let mut names:Vec<String> = font_mgr.family_names().collect();
+    let mut names:Vec<String> = self.mgr.family_names().collect();
     for (font, alias) in &self.fonts {
       names.push(match alias{
         Some(name) => name.clone(),
@@ -438,7 +438,7 @@ impl FontLibrary{
     for (font, alias) in &self.fonts{
       dynamic.register_typeface(font.clone(), alias.as_deref());
     }
-    let std_mgr = FontMgr::new();
+    let std_mgr = self.mgr.clone();
     let dyn_mgr:FontMgr = dynamic.into();
     let mut std_set = std_mgr.match_family(family);
     let mut dyn_set = dyn_mgr.match_family(family);
@@ -449,7 +449,7 @@ impl FontLibrary{
     // set up a collection to query for variable fonts who specify their weights
     // via the 'wght' axis rather than through distinct files with different FontStyles
     let mut var_fc = FontCollection::new();
-    var_fc.set_default_font_manager(FontMgr::new(), None);
+    var_fc.set_default_font_manager(self.mgr.clone(), None);
     var_fc.set_asset_font_manager(Some(dyn_mgr));
 
     // pull style values out of each matching font
@@ -489,7 +489,7 @@ impl FontLibrary{
     }
     self.fonts.push((font, alias));
 
-    let sys_mgr = FontMgr::new();
+    let sys_mgr = self.mgr.clone();
     let default_fam = sys_mgr.legacy_make_typeface(None, FontStyle::default())
       .map(|f| f.family_name());
 
@@ -572,7 +572,7 @@ impl FontLibrary{
             dynamic.register_typeface(face, alias.as_deref());
 
             let mut collection = FontCollection::new();
-            collection.set_default_font_manager(FontMgr::new(), None);
+            collection.set_default_font_manager(self.mgr.clone(), None);
             collection.set_asset_font_manager(Some(dynamic.into()));
             self.collection_cache.insert(key, collection.clone());
             return collection
@@ -632,8 +632,6 @@ pub fn addFamily(mut cx: FunctionContext) -> JsResult<JsValue> {
   let alias = opt_string_arg(&mut cx, 1);
   let filenames = cx.argument::<JsArray>(2)?.to_vec(&mut cx)?;
   let results = JsArray::new(&mut cx, filenames.len() as usize);
-
-  let mgr = FontMgr::new();
   for (i, filename) in strings_in(&mut cx, &filenames).iter().enumerate(){
     let path = Path::new(&filename);
     let typeface = match fs::read(path){
@@ -663,7 +661,7 @@ pub fn addFamily(mut cx: FunctionContext) -> JsResult<JsValue> {
           }
         }.unwrap_or(bytes);
 
-        mgr.new_from_data(&bytes, None)
+        FONT_LIBRARY.lock().unwrap().mgr.new_from_data(&bytes, None)
       }
     };
 
@@ -691,7 +689,7 @@ pub fn reset(mut cx: FunctionContext) -> JsResult<JsUndefined> {
   library.fonts.clear();
 
   let mut collection = FontCollection::new();
-  collection.set_default_font_manager(FontMgr::new(), None);
+  collection.set_default_font_manager(library.mgr.clone(), None);
   library.collection = collection;
   library.collection_cache.drain();
 
