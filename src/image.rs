@@ -4,13 +4,13 @@
 #![allow(dead_code)]
 use std::cell::RefCell;
 use neon::{prelude::*, types::buffer::TypedArray};
-use skia_safe::{Image as SkImage, ImageInfo, ISize, ColorType, AlphaType, Data,
-                FontMgr, Picture, PictureRecorder, Rect};
-use skia_safe::image::images;
-use skia_safe::svg;
-use skia_safe::wrapper::PointerWrapper;  // for SVG Dom access, temporary until next skia-safe update
-
+use skia_safe::{
+	Image as SkImage, ImageInfo, ISize, ColorType, AlphaType, Data,
+  Picture, PictureRecorder, Rect, image::images, svg,
+  wrapper::PointerWrapper // for SVG Dom access, temporary until next skia-safe update
+};
 use crate::utils::*;
+use crate::FONT_LIBRARY;
 
 
 pub type BoxedImage = JsBox<RefCell<Image>>;
@@ -100,10 +100,9 @@ pub fn load_svg(mut cx: FunctionContext) -> JsResult<JsBoolean> {
   let buffer = cx.argument::<JsBuffer>(1)?;
   let data = Data::new_copy(buffer.as_slice(&mut cx));
 
-  // We need an instance of a FontMgr for the DOM loader to use when parsing fonts in the SVG.
-  let mgr = FontMgr::default();
   // Parse & load the SVG data.
-  let dom = svg::Dom::from_bytes(&data, mgr);
+  // We need an instance of a FontMgr for the DOM loader to use when parsing fonts in the SVG.
+  let dom = svg::Dom::from_bytes(&data, FONT_LIBRARY.lock().unwrap().font_mgr());
   if !dom.is_ok() {
     return cx.throw_type_error("Error loading SVG data.")
   }
