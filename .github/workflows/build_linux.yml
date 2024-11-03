@@ -1,44 +1,61 @@
-name: Compile and upload Linux binaries
+name: Build and upload Linux x86 binaries
 on:
   workflow_dispatch:
 
 jobs:
 
   linux-x86:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        libc: [glibc, musl]
-    container:
-      image: ${{ format('ghcr.io/samizdatco/skia-canvas-{0}:latest', matrix.libc) }}
+        settings:
+        - target: 'x86_64-unknown-linux-gnu'
+          setup: >-
+            sudo apt-get update && sudo apt-get install -y --no-install-recommends fontconfig libfontconfig-dev
+        - target: 'x86_64-unknown-linux-musl'
+          setup: >-
+            sudo apt-get update && sudo apt-get install -y --no-install-recommends musl-dev musl-tools ninja-build fontconfig libfontconfig-dev libssl-dev libicu-dev &&
+            sudo ln -s "/usr/bin/g++" "/usr/bin/musl-g++" &&
+            export PKG_CONFIG_ALLOW_CROSS=true &&
+            export PKG_CONFIG_ALL_STATIC=true &&
+            export TARGET=musl &&
+            export CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS="-C target-feature=-crt-static -C link-self-contained=yes -C linker=rust-lld -Clink-args=-L/usr/lib/x86_64-linux-musl/" &&
+            export RUSTFLAGS="-C target-feature=-crt-static" &&
+            export CFLAGS_x86_64_unknown_linux_musl="-nostdinc -nostdlib -isystem/usr/include/x86_64-linux-musl/"
 
     steps:
-    - name: Install rust
-      run: |
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
-    - name: Checkout skia-canvas
+    - name: Checkout repository
       uses: actions/checkout@v4
+
+    - name: Use Node.js
+      uses: actions/setup-node@v4
       with:
-        path: skia-canvas
+        node-version: 20
 
-    - name: Build module
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Use Rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+        target: ${{ matrix.settings.target }}
+
+    - name: Build
       run: |
-        cd skia-canvas
+        ${{ matrix.settings.setup }}
+        cargo update
         npm ci --ignore-scripts
-        npm run build -- --release --features vulkan,window,skia-safe/embed-freetype
+        npm run build -- --release --features=vulkan,window,skia-safe/embed-freetype,skia-safe/freetype-woff2 --target=${{ matrix.settings.target }}
 
-    - name: Package module
-      run: |
-        cd skia-canvas
-        npm test && npm run package
+    - name: Test & Package module
+      run: npm test && npm run package
 
     - name: Upload
       env:
         NODE_PRE_GYP_GITHUB_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
       run: |
-        cd skia-canvas
         npm run upload
-

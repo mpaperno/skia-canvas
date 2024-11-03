@@ -1,4 +1,4 @@
-name: Run Linux-x64 build & tests
+name: Run Linux x86 build & tests
 on:
   workflow_dispatch:
 
@@ -25,7 +25,6 @@ jobs:
             setup: >-
               sudo apt-get update && sudo apt-get install -y --no-install-recommends musl-dev musl-tools ninja-build fontconfig libfontconfig-dev libssl-dev libicu-dev &&
               sudo ln -s "/usr/bin/g++" "/usr/bin/musl-g++" &&
-              export PATH="$HOME/.cargo/bin:/opt/rust/cargo/bin:/usr/local/musl/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH" &&
               export PKG_CONFIG_ALLOW_CROSS=true &&
               export PKG_CONFIG_ALL_STATIC=true &&
               export TARGET=musl &&

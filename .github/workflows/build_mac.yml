@@ -1,4 +1,4 @@
-name: Compile and upload MacOS binaries
+name: Build and upload MacOS binaries
 on:
   workflow_dispatch:
 
@@ -18,7 +18,12 @@ jobs:
     - name: Use Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: 16
+        node-version: 20
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
 
     - name: Use Rust
       uses: dtolnay/rust-toolchain@stable
@@ -26,13 +31,14 @@ jobs:
         toolchain: stable
 
     - name: Build module
-      env:
-        MACOSX_DEPLOYMENT_TARGET: 10.13
       run: |
+        export MACOSX_DEPLOYMENT_TARGET=${{ matrix.arch == 'x86' && '10.14' || '11.0' }}
+        export SKIA_DEBUG=0
+        cargo update
         npm ci --ignore-scripts
-        npm run build -- --release --features metal,window
+        npm run build -- --release --features=metal,window
 
-    - name: Package module
+    - name: Test & Package module
       run: |
         npm test && npm run package
 
