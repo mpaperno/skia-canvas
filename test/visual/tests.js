@@ -309,13 +309,13 @@ tests['quadraticCurveTo()'] = function (ctx) {
 }
 
 /**
-    @param {skCanvas.CanvasRenderingContext2D} ctx
-    @param {{
-      scl?: number
-      offset?: number
-      len?: number
-      cb?: ((a:number,b:number,c:number,d:number) => void) | null
-    }} options
+  @param {skCanvas.CanvasRenderingContext2D} ctx
+  @param {{
+    scl?: number
+    offset?: number
+    len?: number
+    cb?: ((a:number,b:number,c:number,d:number) => void) | null
+  }} options
 */
 function drawPinwheel(ctx, {scl = 1, offset = 25, len = 65, cb = null} = {}) {
   ctx.translate(100, 100)
@@ -1758,8 +1758,22 @@ tests['known bug #416'] = function (ctx, done) {
   img1.src = imageSrc('blend-bg.png')
 }
 
-function drawShadowPattern(ctx, { color = '#c00', offset = [0,0], blur = 5 } = { }) {
-  ctx.fillRect(150, 10, 20, 20)
+/**
+  @param {CanvasRenderingContext2D} ctx
+  @param {{
+    color?: string
+    offset?: [number,number]
+    blur?: number
+    color2?: string | null
+    stroke?: boolean
+    rectCb?: ((a:number,b:number,c:number,d:number) => void) | null
+  }} options
+*/
+function drawShadowPattern(ctx, { color = '#c00', offset = [0,0], blur = 5, color2 = null, stroke = false, rectCb =null } = { }) {
+
+  const rectFn = stroke ? 'strokeRect' : 'fillRect'
+
+  ctx[rectFn](150, 10, 20, 20)
 
   ctx.lineTo(20, 5)
   ctx.lineTo(100, 5)
@@ -1769,21 +1783,27 @@ function drawShadowPattern(ctx, { color = '#c00', offset = [0,0], blur = 5 } = {
   ctx.shadowBlur = blur
   ctx.shadowOffsetX = offset[0]
   ctx.shadowOffsetY = offset[1]
-  ctx.fillRect(20, 20, 100, 100)
+  if (rectCb)
+    rectCb(20, 20, 100, 100)
+  else
+    ctx[rectFn](20, 20, 100, 100)
 
   ctx.beginPath()
   ctx.lineTo(20, 150)
   ctx.lineTo(100, 150)
   ctx.stroke()
 
-  ctx.shadowBlur = 0
+  if (color2)
+    ctx.shadowColor = color2
+  else
+    ctx.shadowBlur = 0
 
   ctx.beginPath()
   ctx.lineTo(20, 180)
   ctx.lineTo(100, 180)
   ctx.stroke()
 
-  ctx.fillRect(150, 150, 20, 20)
+  ctx[rectFn](150, 150, 20, 20)
 }
 
 tests['shadowBlur'] = function (ctx) {
@@ -1804,6 +1824,34 @@ tests['shadowOffset{X,Y} large'] = function (ctx) {
 
 tests['shadowOffset{X,Y} negative'] = function (ctx) {
   drawShadowPattern(ctx, { offset: [-10,-10] })
+}
+
+tests['shadowBlur values'] = function (ctx) {
+  drawShadowPattern(ctx, { blur: 25, offset: [2,2], color2: 'rgba(0,0,0,0)' })
+}
+
+tests['shadow strokeRect()'] = function (ctx) {
+  drawShadowPattern(ctx, { stroke: true, offset: [2,2], color: '#000', color2: 'rgba(0,0,0,0)' })
+}
+
+tests['shadow fill()'] = function (ctx) {
+  drawShadowPattern(ctx, {
+    stroke: true, offset: [2,2], color: '#000', color2: 'rgba(0,0,0,0)',
+    rectCb: (x,y,w,h) => {
+      ctx.rect(x,y,w,h)
+      ctx.fill()
+    }
+  })
+}
+
+tests['shadow stroke()'] = function (ctx) {
+  drawShadowPattern(ctx, {
+    stroke: true, offset: [2,2], color: '#000', color2: 'rgba(0,0,0,0)',
+    rectCb: (x,y,w,h) => {
+      ctx.rect(x,y,w,h)
+      ctx.stroke()
+    }
+  })
 }
 
 tests['shadow translate, scale & rotate'] = function (ctx) {
@@ -1874,120 +1922,6 @@ tests['shadowBlur skew & varying scale'] = function (ctx) {
 tests['drop-shadow filter with scale'] = function (ctx) {
   ctx.filter = 'drop-shadow(5px 5px 6px #c00)';
   drawScaledBoxes(ctx);
-}
-
-tests['shadowBlur values'] = function (ctx) {
-  ctx.fillRect(150, 10, 20, 20)
-
-  ctx.lineTo(20, 5)
-  ctx.lineTo(100, 5)
-  ctx.stroke()
-
-  ctx.shadowColor = '#c00'
-  ctx.shadowBlur = 25
-  ctx.shadowOffsetX = 2
-  ctx.shadowOffsetY = 2
-  ctx.fillRect(20, 20, 100, 100)
-
-  ctx.beginPath()
-  ctx.lineTo(20, 150)
-  ctx.lineTo(100, 150)
-  ctx.stroke()
-
-  ctx.shadowColor = 'rgba(0,0,0,0)'
-
-  ctx.beginPath()
-  ctx.lineTo(20, 180)
-  ctx.lineTo(100, 180)
-  ctx.stroke()
-
-  ctx.fillRect(150, 150, 20, 20)
-}
-
-tests['shadow strokeRect()'] = function (ctx) {
-  ctx.strokeRect(150, 10, 20, 20)
-
-  ctx.lineTo(20, 5)
-  ctx.lineTo(100, 5)
-  ctx.stroke()
-
-  ctx.shadowColor = '#000'
-  ctx.shadowBlur = 5
-  ctx.shadowOffsetX = 2
-  ctx.shadowOffsetY = 2
-  ctx.strokeRect(20, 20, 100, 100)
-
-  ctx.beginPath()
-  ctx.lineTo(20, 150)
-  ctx.lineTo(100, 150)
-  ctx.stroke()
-
-  ctx.shadowColor = 'rgba(0,0,0,0)'
-
-  ctx.beginPath()
-  ctx.lineTo(20, 180)
-  ctx.lineTo(100, 180)
-  ctx.stroke()
-
-  ctx.strokeRect(150, 150, 20, 20)
-}
-
-tests['shadow fill()'] = function (ctx) {
-  ctx.strokeRect(150, 10, 20, 20)
-
-  ctx.lineTo(20, 5)
-  ctx.lineTo(100, 5)
-  ctx.stroke()
-
-  ctx.shadowColor = '#000'
-  ctx.shadowBlur = 5
-  ctx.shadowOffsetX = 2
-  ctx.shadowOffsetY = 2
-  ctx.rect(20, 20, 100, 100)
-  ctx.fill()
-
-  ctx.beginPath()
-  ctx.lineTo(20, 150)
-  ctx.lineTo(100, 150)
-  ctx.stroke()
-
-  ctx.shadowColor = 'rgba(0,0,0,0)'
-
-  ctx.beginPath()
-  ctx.lineTo(20, 180)
-  ctx.lineTo(100, 180)
-  ctx.stroke()
-
-  ctx.strokeRect(150, 150, 20, 20)
-}
-
-tests['shadow stroke()'] = function (ctx) {
-  ctx.strokeRect(150, 10, 20, 20)
-
-  ctx.lineTo(20, 5)
-  ctx.lineTo(100, 5)
-  ctx.stroke()
-
-  ctx.shadowColor = '#000'
-  ctx.shadowBlur = 5
-  ctx.shadowOffsetX = 2
-  ctx.shadowOffsetY = 2
-  ctx.rect(20, 20, 100, 100)
-  ctx.stroke()
-
-  ctx.beginPath()
-  ctx.lineTo(20, 150)
-  ctx.lineTo(100, 150)
-  ctx.stroke()
-
-  ctx.shadowColor = 'rgba(0,0,0,0)'
-
-  ctx.beginPath()
-  ctx.lineTo(20, 180)
-  ctx.lineTo(100, 180)
-  ctx.stroke()
-
-  ctx.strokeRect(150, 150, 20, 20)
 }
 
 tests['shadow globalAlpha'] = function (ctx) {
