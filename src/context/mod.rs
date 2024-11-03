@@ -5,17 +5,21 @@
 use std::cell::RefCell;
 use std::sync::{Arc, Mutex, MutexGuard};
 use neon::prelude::*;
-use skia_safe::{Canvas as SkCanvas, Surface, Paint, Path, PathOp, Image, ImageInfo, Contains,
-                Rect, Point, IPoint, Size, ISize, Color, Color4f, ColorType, ColorSpace, Data,
-                PaintStyle, BlendMode, AlphaType, ClipOp, PictureRecorder, Picture, Drawable,
-                dash_path_effect, path_1d_path_effect, path_utils};
-use skia_safe::image::CachingHint;
-use skia_safe::images::raster_from_data;
-use skia_safe::image_filters::drop_shadow_only;
-use skia_safe::matrix::{ Matrix, TypeMask };
-use skia_safe::textlayout::{ParagraphStyle, TextStyle};
-use skia_safe::canvas::SrcRectConstraint::Strict;
-use skia_safe::path::FillType;
+
+use skia_safe::{
+  Canvas as SkCanvas, Surface, Paint, Path, PathOp, Image, ImageInfo, Contains,
+  Rect, Point, IPoint, Size, ISize, Color, Color4f, ColorType, ColorSpace, Data,
+  PaintStyle, BlendMode, AlphaType, ClipOp, PictureRecorder, Picture, Drawable,
+  image::CachingHint, image_filters, dash_path_effect, path_1d_path_effect,
+  images::raster_from_data,
+  image_filters::drop_shadow_only,
+  matrix::{ Matrix, TypeMask },
+  textlayout::{ParagraphStyle, TextStyle},
+  canvas::SrcRectConstraint::Strict,
+  path_utils::fill_path_with_paint,
+  font_style::Width,
+  path::FillType,
+};
 
 pub mod api;
 pub mod page;
@@ -72,6 +76,7 @@ pub struct State{
   font: String,
   font_variant: String,
   font_features: Vec<String>,
+  font_width: Width,
   char_style: TextStyle,
   graf_style: ParagraphStyle,
   text_baseline: Baseline,
@@ -120,6 +125,7 @@ impl Default for State {
       font: "10px sans-serif".to_string(),
       font_variant: "normal".to_string(),
       font_features:vec![],
+      font_width: Width::NORMAL,
       char_style,
       graf_style,
       text_baseline: Baseline::Alphabetic,
@@ -331,14 +337,14 @@ impl Context2D{
         let offset = (-spacing.0/2.0, -spacing.1/2.0);
 
         let mut stencil = Path::default();
-        path_utils::fill_path_with_paint(&path, &paint, &mut stencil, None, None);
+        fill_path_with_paint(&path, &paint, &mut stencil, None, None);
         let stencil_frame = &Path::rect(stencil.bounds().with_offset(offset).with_outset(spacing), None);
 
         let mut tile_paint = paint.clone();
         tile.mix_into(&mut tile_paint, self.state.global_alpha);
 
         let mut tile_path = Path::default();
-        path_utils::fill_path_with_paint(&stencil_frame, &tile_paint, &mut tile_path, None, None);
+        fill_path_with_paint(&stencil_frame, &tile_paint, &mut tile_path, None, None);
 
         let mut fill_paint = paint.clone();
         fill_paint.set_style(PaintStyle::Fill);
@@ -379,7 +385,7 @@ impl Context2D{
 
         let mut new_path = Path::default();
         let matrix: Matrix = Matrix::scale((precision, precision));
-        path_utils::fill_path_with_paint(&path, &paint, &mut new_path, None, matrix);
+        fill_path_with_paint(&path, &paint, &mut new_path, None, matrix);
 
         match Some(new_path) {
           Some(traced_path) => traced_path.contains(point),
@@ -491,13 +497,14 @@ impl Context2D{
     }
   }
 
-  pub fn set_font(&mut self, spec: FontSpec){
+  pub fn set_font(&mut self, mut spec: FontSpec){
     let mut library = FONT_LIBRARY.lock().unwrap();
     if let Some(mut new_style) = library.update_style(&self.state.char_style, &spec){
       new_style.set_word_spacing(self.state.word_spacing.in_px(new_style.font_size()));
       new_style.set_letter_spacing(self.state.letter_spacing.in_px(new_style.font_size()));
       self.state.font = spec.canonical;
       self.state.font_variant = spec.variant.to_string();
+      self.state.font_width = spec.width;
       self.state.char_style = new_style;
     }
   }
@@ -509,6 +516,12 @@ impl Context2D{
     self.state.char_style = new_style;
   }
 
+  pub fn set_font_width(&mut self, width:Width){
+    let mut library = FONT_LIBRARY.lock().unwrap();
+    let new_style = library.update_width(&self.state.char_style, width);
+    self.state.font_width = width;
+    self.state.char_style = new_style;
+  }
 
   pub fn draw_text(&mut self, text: &str, x: f32, y: f32, width: Option<f32>, style:PaintStyle){
     let paint = self.paint_for_drawing(style);
@@ -548,7 +561,7 @@ impl Context2D{
             true => path.clone(),
             false => {
                 let mut new_path = Path::default();
-                path_utils::fill_path_with_paint(&path, &paint, &mut new_path, None, None);
+                fill_path_with_paint(&path, &paint, &mut new_path, None, None);
                 new_path
             }
           };
