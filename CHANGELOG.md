@@ -1,6 +1,54 @@
 # Changelog
 
-<!-- ## 🥚 ⟩ [Unreleased] -->
+## 🥚 ⟩ [v1.2.0-mp] ⟩ Unreleased
+### New Features
+- Added support for **WEBP** format for both loading as `Image`s and canvas export (in [`Canvas.saveAs()`][Canvas.saveAs] et. al.)
+- `Image`s can now load **SVG** files and can be drawn in a resolution-independent manner via [`drawImage()`][mdn_drawImage] (thanks to @samizdatco for discusson, additions, and some of these notes). Some caveats & quirks to be aware of:
+  - `Image`s loaded from SVG files that don't have `width` and `height` attributes in their root `<svg>` element will report a `naturalWidth` and `naturalHeight` of `150` (and as defaults for `width` and `height` properties).
+    - When drawn using `drawImage(img, x, y)`, w/out specifying a size to draw, these size-less Images will be scaled to fit within the `Canvas`'s current bounds (using an approach akin to CSS's `object-fit: contain`).
+    - When using the 9-argument version of `drawImage()`, the first 4 ‘crop’ arguments will correspond to this scaled-to-fit size, not the `Image`'s reported `naturalWidth` & `naturalHeight`.
+    - Size-less SVGs are also scaled to the canvas' size when using them for creating `CanvasPattern` shaders.
+  - Lists of multiple fonts in a `font-family` attribute (or `style` spec) for an SVG `text` element will only try to match on the first font in the list. If that fails, it will fall back to the system default font. This issue is still under investigation but appears to be on Skia Graphics side.
+  - Other than the above issue, SVGs *can* make use of all fonts installed on the system **and** any fonts loaded dynamically via [`FontLibrary.use()`][FontLibrary.use].
+- **WOFF** & **WOFF2** fonts can now be loaded with [`FontLibrary.use()`][FontLibrary.use] (by @samizdatco).
+- Some changes in `Image` class to closer correspond to [standard `Image`][mdn_Image]:
+  - The `width` and `height` properties are now settable, including in the constructor as arguments (`new Image(width?: number, height?: number)`) or members of the `options` object.
+    - Note that as per spec, these have no effect on drawing the image. They're simply available to use later as image properties. See "Usage note" in the [MDN documentation][mdn_Image].
+  - Added `naturalWidth` & `naturalHeight` read-only properties.
+  - Added a `type: 'svg'` property in the `options` object passed to `Image()` constructor for loading SVG images from a `Buffer`. E.g. `new Image({type: 'svg'})`. (The other `Image.src` types (file/URI/URL) should automatically detect SVG images.)
+- The [`outlineText()`][outline_text] method now takes an optional `width` argument and supports all the context's typographic settings (e.g., `.font`, `.fontVariant`, `.textWrap`, etc.) (by @samizdatco).
+- Typography features now include the standard [`.letterSpacing`][mdn_letterSpacing], [`.wordSpacing`][mdn_wordSpacing], and [`.fontStretch`][mdn_fontStretch] properties (by @samizdatco).
+  - Note that stretch values included in the `.font` string will overwrite the current `.fontStretch` setting (or will reset it to `normal` if omitted), so `.fontStretch` should be used _after_ `.font`.
+  - The `.textTracking` option is deprecated but still available. Prefer using `.letterSpacing` in new code.
+
+### Fixes
+- Fixed multiple issues with `shadowBlur` when applied to a canvas transformed with rotation and/or skew matrices (sometimes no blur was applied or the shadow would dissappear altogether).
+- The `drawCanvas(img, sx, sy, sw, sh, dx, dy, dw, dh)` method now properly clips to the specified crop size.
+- Fixed that in some cases parsing a `DOMMatrix`-like object passed to the various transformation methods may fail and produce invalid results.
+- Fixed some possible exceptions when trying to initialize a `DOMMatrix` or `DOMPoint` instance.
+- Fixed that `DOMMatrix.fromMatrix()` only worked on other `DOMMatrix` instances instead of any matrix-like object.
+
+### Improvements
+- Make transform matrix arguments for all relevant methods more flexible to accept any matrix-like object (not just `DOMMatrix` instance) or an array.
+- An exception is now thrown if matrix argument(s) cannot be parsed (instead of trying to use an invalid matrix).
+- `DOMMatrix` c'tor can now accept another matrix-like object directly (like `fromMatrix()`). Added `DOMMatrix` static functions `isMatrix3()` and `isMatrix4()`.
+- The public properties of all JavaScript classes are now enumerable.
+
+### Other
+- Updated [rust-skia] library to v0.78.2, Skia Graphics Milestone 129.
+- Updated [Neon] library (Node <-> Rust interface) to v1.0, with improved memory management.
+- Performance improvements to **FontLibrary**, speeding up operations like listing families and adding new typefaces (by @samizdatco).
+- New unit tests and an improved visual tests framework.
+
+[mdn_Image]: https://developer.mozilla.org/en-US/docs/Web/API/HTMLImageElement/Image
+[mdn_letterSpacing]: https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/letterSpacing
+[mdn_wordSpacing]: https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/wordSpacing
+[mdn_fontStretch]: https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/fontStretch
+[Canvas.saveAs]: https://github.com/samizdatco/skia-canvas#saveasfilename-page-format-matte-density1-quality092-outlinefalse
+[rust-skia]: https://github.com/rust-skia/rust-skia
+[Neon]: https://github.com/neon-bindings/neon
+[v1.2.0-mp]: https://github.com/mpaperno/skia-canvas/compare/v1.1.2-mp...HEAD
+
 
 ## 📦 ⟩ [v1.1.2-mp] ⟩ Oct 13, 2024
 ### Fixes
