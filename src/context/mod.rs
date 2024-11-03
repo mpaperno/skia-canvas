@@ -5,16 +5,21 @@
 use std::cell::RefCell;
 use std::sync::{Arc, Mutex, MutexGuard};
 use neon::prelude::*;
-use skia_safe::{Canvas as SkCanvas, Surface, Paint, Path, PathOp, Image, ImageInfo, Contains,
-                Rect, Point, IPoint, Size, ISize, Color, Color4f, ColorType, ColorSpace, Data,
-                PaintStyle, BlendMode, AlphaType, ClipOp, PictureRecorder, Picture, Drawable,
-                dash_path_effect, path_1d_path_effect};
-use skia_safe::image::CachingHint;
-use skia_safe::image_filters::drop_shadow_only;
-use skia_safe::matrix::{ Matrix, TypeMask };
-use skia_safe::textlayout::{ParagraphStyle, TextStyle};
-use skia_safe::canvas::SrcRectConstraint::Strict;
-use skia_safe::path::FillType;
+
+use skia_safe::{
+  Canvas as SkCanvas, Surface, Paint, Path, PathOp, Image, ImageInfo, Contains,
+  Rect, Point, IPoint, Size, ISize, Color, Color4f, ColorType, ColorSpace, Data,
+  PaintStyle, BlendMode, AlphaType, ClipOp, PictureRecorder, Picture, Drawable,
+  image::CachingHint, image_filters, dash_path_effect, path_1d_path_effect,
+  images::raster_from_data,
+  image_filters::drop_shadow_only,
+  matrix::{ Matrix, TypeMask },
+  textlayout::{ParagraphStyle, TextStyle},
+  canvas::SrcRectConstraint::Strict,
+  path_utils::fill_path_with_paint,
+  font_style::Width,
+  path::FillType,
+};
 
 pub mod api;
 pub mod page;
@@ -71,10 +76,13 @@ pub struct State{
   font: String,
   font_variant: String,
   font_features: Vec<String>,
+  font_width: Width,
   char_style: TextStyle,
   graf_style: ParagraphStyle,
   text_baseline: Baseline,
   text_tracking: i32,
+  letter_spacing: Spacing,
+  word_spacing: Spacing,
   text_wrap: bool,
 }
 
@@ -117,10 +125,13 @@ impl Default for State {
       font: "10px sans-serif".to_string(),
       font_variant: "normal".to_string(),
       font_features:vec![],
+      font_width: Width::NORMAL,
       char_style,
       graf_style,
       text_baseline: Baseline::Alphabetic,
       text_tracking: 0,
+      letter_spacing: Spacing::default(),
+      word_spacing: Spacing::default(),
       text_wrap: false
     }
   }
@@ -187,7 +198,7 @@ impl Context2D{
   }
 
   pub fn with_canvas<F>(&self, f:F)
-    where F:FnOnce(&mut SkCanvas)
+    where F:FnOnce(&SkCanvas)
   {
     self.with_recorder(|mut recorder|{
       recorder.append(f);
@@ -204,8 +215,8 @@ impl Context2D{
   }
 
   // DRY helper for render_to_canvas()
-  fn render_shadow<F>(&self, canvas:&mut SkCanvas, paint:&Paint, f:F)
-    where F:Fn(&mut SkCanvas, &Paint)
+  fn render_shadow<F>(&self, canvas:&SkCanvas, paint:&Paint, f:F)
+    where F:Fn(&SkCanvas, &Paint)
   {
     if let Some(shadow_paint) = self.paint_for_shadow(paint){
       canvas.save();
@@ -217,7 +228,7 @@ impl Context2D{
   }
 
   pub fn render_to_canvas<F>(&self, paint:&Paint, f:F)
-    where F:Fn(&mut SkCanvas, &Paint)
+    where F:Fn(&SkCanvas, &Paint)
   {
     match self.state.global_composite_operation{
       BlendMode::SrcIn | BlendMode::SrcOut |
@@ -324,12 +335,16 @@ impl Context2D{
         canvas.save();
         let spacing = tile.spacing();
         let offset = (-spacing.0/2.0, -spacing.1/2.0);
-        let stencil = paint.get_fill_path(&path, None, None).unwrap();
+
+        let mut stencil = Path::default();
+        fill_path_with_paint(&path, &paint, &mut stencil, None, None);
         let stencil_frame = &Path::rect(stencil.bounds().with_offset(offset).with_outset(spacing), None);
 
         let mut tile_paint = paint.clone();
         tile.mix_into(&mut tile_paint, self.state.global_alpha);
-        let tile_path = tile_paint.get_fill_path(stencil_frame, None, None).unwrap();
+
+        let mut tile_path = Path::default();
+        fill_path_with_paint(&stencil_frame, &tile_paint, &mut tile_path, None, None);
 
         let mut fill_paint = paint.clone();
         fill_paint.set_style(PaintStyle::Fill);
@@ -367,7 +382,12 @@ impl Context2D{
       PaintStyle::Stroke => {
         let paint = self.paint_for_drawing(PaintStyle::Stroke);
         let precision = 0.3; // this is what Chrome uses to compute this
-        match paint.get_fill_path(path, None, Some(precision)){
+
+        let mut new_path = Path::default();
+        let matrix: Matrix = Matrix::scale((precision, precision));
+        fill_path_with_paint(&path, &paint, &mut new_path, None, matrix);
+
+        match Some(new_path) {
           Some(traced_path) => traced_path.contains(point),
           None => path.contains(point)
         }
@@ -395,14 +415,13 @@ impl Context2D{
         paint.set_anti_alias(true)
              .set_style(PaintStyle::Fill)
              .set_blend_mode(BlendMode::Clear);
-        canvas.draw_rect(&rect, &paint);
+        canvas.draw_rect(rect, &paint);
       })
     }
   }
 
   pub fn draw_picture(&mut self, picture:&Option<Picture>, src_rect:&Rect, dst_rect:&Rect){
     let paint = self.paint_for_image();
-    let size = ISize::new(dst_rect.width() as i32, dst_rect.height() as i32);
     let mag = Point::new(dst_rect.width()/src_rect.width(), dst_rect.height()/src_rect.height());
     let mut matrix = Matrix::new_identity();
     matrix.pre_scale( (mag.x, mag.y), None )
@@ -416,7 +435,10 @@ impl Context2D{
           (Some(BlendMode::SrcOver), 255, None) => None,
           _ => Some(paint)
         };
-        canvas.draw_picture(&picture, Some(&matrix), paint);
+        canvas.save();
+        canvas.clip_rect(dst_rect, ClipOp::Intersect, true);
+        canvas.draw_picture(picture, Some(&matrix), paint);
+        canvas.restore();
       });
     }
   }
@@ -426,7 +448,7 @@ impl Context2D{
     if let Some(image) = &img {
       self.render_to_canvas(&paint, |canvas, paint| {
         let sampling = self.state.image_filter.sampling();
-        canvas.draw_image_rect_with_sampling_options(&image, Some((src_rect, Strict)), dst_rect, sampling, paint);
+        canvas.draw_image_rect_with_sampling_options(image, Some((src_rect, Strict)), dst_rect, sampling, paint);
       });
     }
   }
@@ -461,7 +483,7 @@ impl Context2D{
     // works just like draw_image in terms of src/dst rects, but clears the dst_rect and then draws
     // without clips, transforms, alpha, blend, or shadows
     let data = Data::new_copy(buffer);
-    if let Some(bitmap) = Image::from_raster_data(info, data, info.min_row_bytes()) {
+    if let Some(bitmap) = raster_from_data(info, data, info.min_row_bytes()) {
       self.push(); // cache matrix & clip in self.state
       self.with_canvas(|canvas| {
         let paint = Paint::default();
@@ -475,11 +497,14 @@ impl Context2D{
     }
   }
 
-  pub fn set_font(&mut self, spec: FontSpec){
+  pub fn set_font(&mut self, mut spec: FontSpec){
     let mut library = FONT_LIBRARY.lock().unwrap();
-    if let Some(new_style) = library.update_style(&self.state.char_style, &spec){
+    if let Some(mut new_style) = library.update_style(&self.state.char_style, &spec){
+      new_style.set_word_spacing(self.state.word_spacing.in_px(new_style.font_size()));
+      new_style.set_letter_spacing(self.state.letter_spacing.in_px(new_style.font_size()));
       self.state.font = spec.canonical;
       self.state.font_variant = spec.variant.to_string();
+      self.state.font_width = spec.width;
       self.state.char_style = new_style;
     }
   }
@@ -491,6 +516,12 @@ impl Context2D{
     self.state.char_style = new_style;
   }
 
+  pub fn set_font_width(&mut self, width:Width){
+    let mut library = FONT_LIBRARY.lock().unwrap();
+    let new_style = library.update_width(&self.state.char_style, width);
+    self.state.font_width = width;
+    self.state.char_style = new_style;
+  }
 
   pub fn draw_text(&mut self, text: &str, x: f32, y: f32, width: Option<f32>, style:PaintStyle){
     let paint = self.paint_for_drawing(style);
@@ -506,8 +537,8 @@ impl Context2D{
     Typesetter::new(&self.state, text, width).metrics()
   }
 
-  pub fn outline_text(&self, text:&str) -> Option<Path>{
-    Typesetter::new(&self.state, text, None).path()
+  pub fn outline_text(&self, text:&str, width:Option<f32>) -> Path{
+    Typesetter::new(&self.state, text, width).path()
   }
 
   pub fn color_with_alpha(&self, src:&Color) -> Color{
@@ -528,7 +559,11 @@ impl Context2D{
         Some(path) => {
           let marker = match path.is_last_contour_closed(){
             true => path.clone(),
-            false => paint.get_fill_path(path, None, None).unwrap()
+            false => {
+                let mut new_path = Path::default();
+                fill_path_with_paint(&path, &paint, &mut new_path, None, None);
+                new_path
+            }
           };
           path_1d_path_effect::new(
             &marker,

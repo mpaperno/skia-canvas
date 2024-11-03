@@ -377,7 +377,24 @@ describe("Context2D", ()=>{
       // make sure chains of filters compose correctly <https://codepen.io/sosuke/pen/Pjoqqp>
       ctx.filter = 'blur(5px) invert(56%) sepia(63%) saturate(4837%) hue-rotate(163deg) brightness(96%) contrast(101%)'
       ctx.fillRect(0,0,20,20)
-      expect(pixel(10, 10)).toEqual([0, 161, 212, 245])
+      expect(pixel(10, 10)).toEqual([0, 162, 213, 245])
+    })
+
+    test('shadow', async() => {
+      const sin = Math.sin(1.15*Math.PI)
+      const cos = Math.cos(1.15*Math.PI)
+      ctx.translate(150, 150)
+      ctx.transform(cos, sin, -sin, cos, 0, 0)
+
+      ctx.shadowColor = '#000'
+      ctx.shadowBlur = 5
+      ctx.shadowOffsetX = 10
+      ctx.shadowOffsetY = 10
+      ctx.fillStyle = '#eee'
+      ctx.fillRect(25, 25, 65, 10)
+
+      // ensure that the shadow is actually fuzzy despite the transforms
+      expect(pixel(143, 117)).not.toEqual(BLACK)
     })
 
     test("clip()", () => {
@@ -775,6 +792,13 @@ describe("Context2D", ()=>{
       expect(pixel(WIDTH*.25, HEIGHT/2)).toEqual(GREEN)
       expect(pixel(WIDTH*.75, HEIGHT/2)).toEqual(GREEN)
       expect(pixel(WIDTH/2, HEIGHT/2)).toEqual(CLEAR)
+
+      ctx.clearRect(0,0,WIDTH,HEIGHT)
+      ctx.drawCanvas(srcCanvas, 1,1,2,2, 0,0,2,2)
+      expect(pixel(0, 0)).toEqual(CLEAR)
+      expect(pixel(0, 1)).toEqual(GREEN)
+      expect(pixel(1, 0)).toEqual(GREEN)
+      expect(pixel(1, 1)).toEqual(GREEN)
 
       let image = await loadAsset('checkers.png')
       expect( () => ctx.drawCanvas(image, 0, 0) ).not.toThrow()

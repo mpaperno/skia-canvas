@@ -4,7 +4,7 @@
 #![allow(non_snake_case)]
 #![allow(dead_code)]
 use std::cell::RefCell;
-use std::f32::consts::PI;
+use std::f32::{EPSILON, consts::PI};
 use neon::prelude::*;
 use once_cell::sync::Lazy;
 use skia_safe::{Path, Point, PathDirection::{CW, CCW}, Rect, RRect, Matrix, PathOp, StrokeRec,};
@@ -24,11 +24,13 @@ pub struct Path2D{
   pub path:Path
 }
 
-impl Path2D{
-  pub fn new() -> Self{
+impl Default for Path2D {
+  fn default() -> Self {
     Self{ path:Path::new() }
   }
+}
 
+impl Path2D{
   pub fn scoot(&mut self, x: f32, y: f32){
     if self.path.is_empty(){
       self.path.move_to((x, y));
@@ -53,7 +55,7 @@ impl Path2D{
     //  even if it wraps around more than 360 degrees. We also respect the directionality.
     // When disabled, preserves "standard" behavior of always stopping at a full circle. See further notes below.
 
-    if sweep_deg >= 359.9999  {
+    if sweep_deg >= 360.0 - EPSILON {
       if *DRAW_ELLIPSE_PAST_FULL_CIRCLE {
         // This following way leaves the path position where the user specified, even it it wraps around more than
         // a full circle. In this case it will also create the "extra" path segments, essentialy overlapping the path again.
@@ -76,7 +78,7 @@ impl Path2D{
       return;
     }
 
-    if sweep_deg <= -359.9999 {
+    if sweep_deg <= -360.0 + EPSILON {
       // Same notes as above apply here.
       if *DRAW_ELLIPSE_PAST_FULL_CIRCLE {
         let mut part = -180.0;
@@ -158,7 +160,7 @@ pub fn from_path(mut cx: FunctionContext) -> JsResult<BoxedPath2D> {
 
 pub fn from_svg(mut cx: FunctionContext) -> JsResult<BoxedPath2D> {
   let svg_string = string_arg(&mut cx, 1, "svgPath")?;
-  let path = Path::from_svg(svg_string).unwrap_or_else(Path::new);
+  let path = Path::from_svg(svg_string).unwrap_or_default();
   Ok(cx.boxed(RefCell::new(Path2D{path})))
 }
 
@@ -557,7 +559,7 @@ pub fn edges(mut cx: FunctionContext) -> JsResult<JsArray> {
 
     if let Some(edge) = from_verb(verb){
       let cmd = cx.string(edge);
-      let segment = JsArray::new(&mut cx, 1 + points.len() as u32);
+      let segment = JsArray::new(&mut cx, 1 + points.len() as usize);
       segment.set(&mut cx, 0, cmd)?;
 
       let at_point = if points.len()>1{ 1 }else{ 0 };
@@ -578,7 +580,7 @@ pub fn edges(mut cx: FunctionContext) -> JsResult<JsArray> {
     }
   }
 
-  let verbs = JsArray::new(&mut cx, edges.len() as u32);
+  let verbs = JsArray::new(&mut cx, edges.len() as usize);
   for (i, segment) in edges.iter().enumerate(){
     verbs.set(&mut cx, i as u32, *segment)?;
   }

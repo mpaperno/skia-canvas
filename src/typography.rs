@@ -9,9 +9,8 @@ use std::ops::Range;
 use std::path::Path;
 use std::collections::HashMap;
 use neon::prelude::*;
-use neon::result::Throw;
 
-use skia_safe::{Font, FontMgr, FontMetrics, FontArguments, Typeface, Data, Paint, Point, Rect, Path as SkPath};
+use skia_safe::{Font, FontMgr, FontStyleSet, FontMetrics, FontArguments, Typeface, Paint, Point, Rect, Path as SkPath};
 use skia_safe::font_style::{FontStyle, Weight, Width, Slant};
 use skia_safe::font_arguments::{VariationPosition, variation_position::Coordinate};
 use skia_safe::textlayout::{FontCollection, TypefaceFontProvider, TextStyle, TextAlign,
@@ -20,6 +19,16 @@ use skia_safe::textlayout::{FontCollection, TypefaceFontProvider, TextStyle, Tex
 use crate::FONT_LIBRARY;
 use crate::utils::*;
 use crate::context::State;
+
+#[cfg(target_os = "windows")]
+use allsorts::{
+  binary::read::ReadScope,
+  subset::whole_font,
+  tables::FontTableProvider,
+  woff::WoffFont,
+  woff2::Woff2Font,
+};
+
 
 //
 // Text layout and metrics
@@ -71,7 +80,7 @@ impl Typesetter{
 
   pub fn layout(&self, paint:&Paint) -> (Paragraph, Point) {
     let mut char_style = self.char_style.clone();
-    char_style.set_foreground_color(Some(paint.clone()));
+    char_style.set_foreground_paint(paint);
 
     let mut paragraph_builder = ParagraphBuilder::new(&self.graf_style, &self.typefaces);
     paragraph_builder.push_style(&char_style);
@@ -105,22 +114,24 @@ impl Typesetter{
       return vec![vec![0.0, 0.0, 0.0, 0.0, 0.0, ascent, descent, ascent, descent, hang, norm, ideo]]
     }
 
-    // find the bounds and text-range for each individual line
-    let origin = paragraph.get_line_metrics()[0].baseline;
-    let line_rects:Vec<(Rect, Range<usize>, f32)> = paragraph.get_line_metrics().iter().map(|line|{
+    // find the bounds and text-range for each individual line & the bounds for the whole text run
+    let mut bounds = Rect::new_empty();
+    let line_metrics = paragraph.get_line_metrics();
+    let origin = line_metrics[0].baseline;
+    let line_rects:Vec<(Rect, Range<usize>, f32)> = line_metrics.iter().map(|line|{
       let baseline = line.baseline - origin;
-      let rect = Rect::new(line.left as f32, (baseline - line.ascent) as f32,
-                          (line.left + line.width) as f32, (baseline + line.descent) as f32);
+      let rect = Rect::new(
+        line.left as f32,                (baseline - line.ascent) as f32,
+        (line.left + line.width) as f32, (baseline + line.descent) as f32
+      ).with_offset((alignment, offset));
+
       let range = string_idx_range(&self.text, line.start_index,
         if self.width==GALLEY{ line.end_index }else{ line.end_excluding_whitespaces }
       );
-      (rect.with_offset((alignment, offset)), range, baseline as f32 + offset)
-    }).collect();
 
-    // take their union to find the bounds for the whole text run
-    let (bounds, chars) = line_rects.iter().fold((Rect::new_empty(), 0), |(union, indices), (rect, range, _)|
-      (Rect::join2(union, rect), range.end)
-    );
+      bounds.join(rect);
+      (rect, range, baseline as f32 + offset)
+    }).collect();
 
     // return a list-of-lists whose first entry is the whole-run font metrics and subsequent entries are
     // line-rect/range values (with the js side responsible for restructuring the whole bundle)
@@ -135,44 +146,50 @@ impl Typesetter{
     results
   }
 
-  pub fn path(&mut self) -> Option<SkPath> {
-    let families:Vec<String> = self.char_style.font_families().iter().map(|fam| fam.to_string()).collect();
-    let matches = self.typefaces.find_typefaces(&families, self.char_style.font_style());
-    if let Some(typeface) = matches.first(){
-      let font = Font::from_typeface(typeface, self.char_style.font_size());
-      let (leading, metrics) = font.metrics();
-      let (width, bounds) = font.measure_str(&self.text, None);
-      let offset = (
-        width * get_alignment_factor(&self.graf_style),
-        get_baseline_offset(&metrics, self.baseline)
-      );
+  pub fn path(&mut self) -> SkPath {
+    let (mut paragraph, mut offset) = self.layout(&Paint::default());
+    offset.y -= self.char_style.font_metrics().ascent + paragraph.alphabetic_baseline();
 
-      Some(SkPath::from_str(&self.text, offset, &font))
-    }else{
-      None
-    }
+    let mut path = SkPath::new();
+    for idx in 0..paragraph.line_number(){
+      let (skipped, line) = paragraph.get_path_at(idx);
+      path.add_path(&line, offset, None);  
+    };
+    path
   }
 }
 
 //
 // Font argument packing & unpacking
 //
-
+#[derive(Debug, Clone)]
 pub struct FontSpec{
   families: Vec<String>,
   size: f32,
   leading: f32,
-  style: FontStyle,
+  weight: Weight,
+  pub width: Width,
+  slant: Slant,
   features: Vec<(String, i32)>,
   pub variant: String,
   pub canonical: String
 }
 
+impl FontSpec{
+  pub fn with_width(&self, width:Width) -> Self{
+    Self{width, ..self.clone()}
+  }
+
+  pub fn style(&self) -> FontStyle{
+    FontStyle::new(self.weight, self.width, self.slant)
+  }
+}
+
 pub fn font_arg(cx: &mut FunctionContext, idx: i32) -> NeonResult<Option<FontSpec>> {
-  let arg = cx.argument::<JsValue>(idx)?;
+  let arg = cx.argument::<JsValue>(idx as usize)?;
   if arg.is_a::<JsNull, _>(cx){ return Ok(None) }
 
-  let font_desc = cx.argument::<JsObject>(idx)?;
+  let font_desc = cx.argument::<JsObject>(idx as usize)?;
   let families = strings_at_key(cx, &font_desc, "family")?;
   let canonical = string_for_key(cx, &font_desc, "canonical")?;
   let variant = string_for_key(cx, &font_desc, "variant")?;
@@ -186,8 +203,7 @@ pub fn font_arg(cx: &mut FunctionContext, idx: i32) -> NeonResult<Option<FontSpe
   let feat_obj:Handle<JsObject> = font_desc.get(cx, "features")?;
   let features = font_features(cx, &feat_obj)?;
 
-  let style = FontStyle::new(weight, width, slant);
-  Ok(Some(FontSpec{ families, size, leading, style, features, variant, canonical}))
+  Ok(Some(FontSpec{ families, size, leading, weight, slant, width, features, variant, canonical}))
 }
 
 pub fn font_features(cx: &mut FunctionContext, obj: &Handle<JsObject>) -> NeonResult<Vec<(String, i32)>>{
@@ -332,7 +348,7 @@ pub fn get_alignment_factor(graf_style:&ParagraphStyle) -> f32 {
   }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum Baseline{ Top, Hanging, Middle, Alphabetic, Ideographic, Bottom }
 
 pub fn to_text_baseline(mode_name:&str) -> Option<Baseline>{
@@ -383,13 +399,53 @@ impl CollectionKey{
   }
 }
 
+#[derive(Clone)]
+pub struct Spacing{
+  raw_size: f32,
+  unit: String,
+  px_size: f32,
+}
+
+impl Default for Spacing{
+  fn default() -> Self {
+      Self{raw_size:0.0, unit:"px".to_string(), px_size:0.0}
+  }
+}
+
+impl Spacing{
+  pub fn parse(raw_size:f32, unit:String, px_size:f32) -> Option<Self>{
+    let main_size = match unit.as_str(){
+      "em" | "rem" => raw_size,
+      _ => px_size
+    };
+
+    match main_size.is_nan(){
+      false => Some(Self{raw_size, unit, px_size}),
+      true => None
+    }
+  }
+
+  pub fn in_px(&self, em_size:f32) -> f32{
+    match self.unit.as_str(){
+      "em" | "rem" => self.raw_size * em_size,
+      _ => self.px_size
+    }
+  }
+
+  pub fn to_string(&self) -> String{
+    format!("{}{}", self.raw_size, self.unit)
+  }
+}
+
 //
 // Font collection management
 //
 
 pub struct FontLibrary{
+  pub mgr: FontMgr,
   pub fonts: Vec<(Typeface, Option<String>)>,
-  pub collection: FontCollection,
+  pub generics: Vec<(Typeface, Option<String>)>,
+  pub collection: Option<FontCollection>,
   collection_cache: HashMap<CollectionKey, FontCollection>,
 }
 
@@ -399,16 +455,92 @@ unsafe impl Send for FontLibrary {
 
 impl FontLibrary{
   pub fn shared() -> Mutex<Self>{
-    let fonts = vec![];
-    let collection_cache = HashMap::new();
-    let mut collection = FontCollection::new();
-    collection.set_default_font_manager(FontMgr::new(), None);
-    Mutex::new(FontLibrary{ collection, collection_cache, fonts })
+    Mutex::new(
+      FontLibrary{
+        mgr:FontMgr::default(), collection:None, collection_cache:HashMap::new(), fonts:vec![], generics:vec![]
+      }
+    )
+  }
+
+  fn font_collection(&mut self) -> FontCollection{
+    // lazily initialize font collection on first actual use
+    if self.collection.is_none(){
+      self.rebuild_collection(); // assigns to self.collection
+    };
+    self.collection.as_ref().unwrap().clone()
+  }
+
+  fn ensure_generics(&mut self) {
+    // set up generic font family mappings
+    if self.generics.is_empty(){
+      let mut generics = vec![];
+      let mut font_stacks = HashMap::new();
+      font_stacks.insert("serif", vec!["Times", "Nimbus Roman", "Times New Roman", "Tinos", "Noto Serif", "Liberation Serif", "DejaVu Serif", "Source Serif Pro"]);
+      font_stacks.insert("sans-serif", vec!["Avenir Next", "Avenir", "Helvetica Neue", "Helvetica", "Arial Nova", "Arial", "Inter", "Arimo", "Roboto", "Noto Sans", "Liberation Sans", "DejaVu Sans", "Nimbus Sans", "Clear Sans", "Lato", "Cantarell", "Arimo", "Ubuntu"]);
+      font_stacks.insert("monospace", vec!["Cascadia Code", "Source Code Pro", "Menlo", "Consolas", "Monaco", "Liberation Mono", "Ubuntu Mono", "Roboto Mono", "Lucida Console", "Monaco", "Courier New", "Courier"]);
+      font_stacks.insert("system-ui", vec!["Helvetica Neue", "Ubuntu", "Segoe UI", "Fira Sans", "Roboto", "DroidSans", "Tahoma"]);
+      // see also: https://modernfontstacks.com | https://systemfontstack.com | https://www.ctrl.blog/entry/font-stack-text.html
+
+      // Set up mappings for generic font names based on the first match found on the system
+      for (generic_name, families) in font_stacks.into_iter() {
+        let best_match = families.iter().find_map(|fam| {
+          let mut style_set = self.mgr.match_family(fam);
+          match style_set.count() > 0{
+            true => Some(style_set),
+            false => None
+          }
+        });
+
+        let alias = Some(generic_name.to_string());
+        if let Some(mut style_set) = best_match{
+          for style_index in 0..style_set.count() {
+            if let Some(font) = style_set.new_typeface(style_index){
+              generics.push((font, alias.clone()));
+            }
+          }
+        }
+      }
+      self.generics = generics;
+    }
+  }
+
+  pub fn font_mgr(&mut self) -> FontMgr {
+    // builds a single font manager with access to both system and user-loaded fonts (for use w/ SVG images)
+    let sys_mgr = self.mgr.clone();
+    let mut union_mgr = TypefaceFontProvider::new();
+
+    // add a sensible fallback as the first font so the default isn't just whatever is alphabetically first
+    let default_fam = sys_mgr.legacy_make_typeface(None, FontStyle::default()).unwrap();
+    union_mgr.register_typeface(default_fam, None);
+    // self.font_collection()
+    //   .find_typefaces(&["system-ui", "sans-serif", "serif"], FontStyle::normal())
+    //   .into_iter().nth(0)
+    //   .map(|fallback| {
+    //     union_mgr.register_typeface(fallback, None);
+    //   });
+
+    // add all system fonts
+    for i in 0..sys_mgr.count_families() {
+      let mut style_set = sys_mgr.new_style_set(i);
+      for style_index in 0..style_set.count() {
+        if let Some(typeface) = style_set.new_typeface(style_index){
+          union_mgr.register_typeface(typeface, None);
+        }
+      }
+    }
+
+    // add generic mappings & user-loaded fonts
+    for (font, alias) in &self.generics{
+      union_mgr.register_typeface(font.clone(), alias.as_deref());
+    }
+    for (font, alias) in &self.fonts{
+      union_mgr.register_typeface(font.clone(), alias.as_deref());
+    }
+    union_mgr.into()
   }
 
   fn families(&self) -> Vec<String>{
-    let font_mgr = FontMgr::new();
-    let mut names:Vec<String> = font_mgr.family_names().collect();
+    let mut names:Vec<String> = self.mgr.family_names().collect();
     for (font, alias) in &self.fonts {
       names.push(match alias{
         Some(name) => name.clone(),
@@ -424,12 +556,12 @@ impl FontLibrary{
     // merge the system fonts and our dynamically added fonts into one list of FontStyles
     let mut dynamic = TypefaceFontProvider::new();
     for (font, alias) in &self.fonts{
-      dynamic.register_typeface(font.clone(), alias.clone());
+      dynamic.register_typeface(font.clone(), alias.as_deref());
     }
-    let std_mgr = FontMgr::new();
+    let std_mgr = self.mgr.clone();
     let dyn_mgr:FontMgr = dynamic.into();
-    let mut std_set = std_mgr.match_family(&family);
-    let mut dyn_set = dyn_mgr.match_family(&family);
+    let mut std_set = std_mgr.match_family(family);
+    let mut dyn_set = dyn_mgr.match_family(family);
     let std_styles = (0..std_set.count()).map(|i| std_set.style(i));
     let dyn_styles = (0..dyn_set.count()).map(|i| dyn_set.style(i));
     let all_styles = std_styles.chain(dyn_styles);
@@ -437,7 +569,7 @@ impl FontLibrary{
     // set up a collection to query for variable fonts who specify their weights
     // via the 'wght' axis rather than through distinct files with different FontStyles
     let mut var_fc = FontCollection::new();
-    var_fc.set_default_font_manager(FontMgr::new(), None);
+    var_fc.set_default_font_manager(self.mgr.clone(), None);
     var_fc.set_asset_font_manager(Some(dyn_mgr));
 
     // pull style values out of each matching font
@@ -475,39 +607,56 @@ impl FontLibrary{
     ){
       self.fonts.remove(idx);
     }
-    self.fonts.push((font, alias));
 
+    // add the new typeface/alias and recreate the FontCollection to include it
+    self.fonts.push((font, alias));
+    self.rebuild_collection();
+  }
+
+  fn rebuild_collection(&mut self){
     let mut assets = TypefaceFontProvider::new();
+
+    self.ensure_generics();
+    for (font, alias) in &self.generics {
+      assets.register_typeface(font.clone(), alias.as_deref());
+    }
     for (font, alias) in &self.fonts {
-      assets.register_typeface(font.clone(), alias.as_ref());
+      assets.register_typeface(font.clone(), alias.as_deref());
     }
 
+    let mut style_set = assets.match_family("system-ui");
+    let default_fam = match style_set.count() > 1{
+      true => style_set.match_style(FontStyle::default()),
+      false => self.mgr.legacy_make_typeface(None, FontStyle::default())
+    }.map(|f| f.family_name());
+
     let mut collection = FontCollection::new();
-    collection.set_default_font_manager(FontMgr::new(), None);
+    collection.set_default_font_manager(self.mgr.clone(), default_fam.as_deref());
     collection.set_asset_font_manager(Some(assets.into()));
-    self.collection = collection;
+    self.collection = Some(collection);
     self.collection_cache.drain();
   }
 
   pub fn update_style(&mut self, orig_style:&TextStyle, spec: &FontSpec) -> Option<TextStyle>{
     let mut style = orig_style.clone();
 
-    // don't update the style if no usable family names were specified
-    let matches = self.collection.find_typefaces(&spec.families, spec.style);
-    if matches.is_empty(){
-      return None
-    }
-
-    style.set_font_style(spec.style);
-    style.set_font_families(&spec.families);
-    style.set_font_size(spec.size);
-    style.set_height(spec.leading / spec.size);
-    style.set_height_override(true);
-    style.reset_font_features();
-    for (feat, val) in &spec.features{
-      style.add_font_feature(feat, *val);
-    }
-    Some(style)
+    // only update the style if a usable family name was specified
+    self.font_collection()
+      .find_typefaces(&spec.families, spec.style())
+      .into_iter().nth(0)
+      .map(|typeface| {
+        style.set_typeface(typeface);
+        style.set_font_families(&spec.families);
+        style.set_font_style(spec.style());
+        style.set_font_size(spec.size);
+        style.set_height(spec.leading / spec.size);
+        style.set_height_override(true);
+        style.reset_font_features();
+        for (feat, val) in &spec.features{
+          style.add_font_feature(feat, *val);
+        }
+        style
+      })
   }
 
   pub fn update_features(&mut self, orig_style:&TextStyle, features: &[(String, i32)]) -> TextStyle{
@@ -518,10 +667,17 @@ impl FontLibrary{
     style
   }
 
+  pub fn update_width(&mut self, orig_style:&TextStyle, width:Width) -> TextStyle{
+    let mut style = orig_style.clone();
+    let fs = style.font_style();
+    style.set_font_style({FontStyle::new(fs.weight(), width, fs.slant())});
+    style
+  }
+
   pub fn collect_fonts(&mut self, style: &TextStyle) -> FontCollection {
     let families = style.font_families();
     let families:Vec<&str> = families.iter().collect();
-    let matches = self.collection.find_typefaces(&families, style.font_style());
+    let matches = self.font_collection().find_typefaces(&families, style.font_style());
 
     // if the matched typeface is a variable font, create an instance that matches
     // the current weight settings and return early with a new FontCollection that
@@ -544,12 +700,7 @@ impl FontLibrary{
           let chars = vec![param.tag.a(), param.tag.b(), param.tag.c(), param.tag.d()];
           let tag = String::from_utf8(chars).unwrap();
           if tag == "wght"{
-            // NB: currently setting the value to *one less* than what was requested
-            //     to work around weird Skia behavior that returns something nonlinearly
-            //     weighted in many cases (but not for ±1 of that value). This makes it so
-            //     that n × 100 values will render correctly (and the bug will manifest at
-            //     n × 100 + 1 instead)
-            let weight = *style.font_style().weight() - 1;
+            let weight = *style.font_style().weight();
             let value = (weight as f32).max(param.min).min(param.max);
             let coords = [ Coordinate { axis: param.tag, value } ];
             let v_pos = VariationPosition { coordinates: &coords };
@@ -557,10 +708,10 @@ impl FontLibrary{
             let face = font.clone_with_arguments(&args).unwrap();
 
             let mut dynamic = TypefaceFontProvider::new();
-            dynamic.register_typeface(face, alias);
+            dynamic.register_typeface(face, alias.as_deref());
 
             let mut collection = FontCollection::new();
-            collection.set_default_font_manager(FontMgr::new(), None);
+            collection.set_default_font_manager(self.mgr.clone(), None);
             collection.set_asset_font_manager(Some(dynamic.into()));
             self.collection_cache.insert(key, collection.clone());
             return collection
@@ -570,7 +721,7 @@ impl FontLibrary{
     }
 
     // if the matched font wasn't variable, then just return the standard collection
-    self.collection.clone()
+    self.font_collection()
   }
 
 }
@@ -619,15 +770,38 @@ pub fn family(mut cx: FunctionContext) -> JsResult<JsValue> {
 pub fn addFamily(mut cx: FunctionContext) -> JsResult<JsValue> {
   let alias = opt_string_arg(&mut cx, 1);
   let filenames = cx.argument::<JsArray>(2)?.to_vec(&mut cx)?;
-  let results = JsArray::new(&mut cx, filenames.len() as u32);
-
+  let results = JsArray::new(&mut cx, filenames.len() as usize);
   for (i, filename) in strings_in(&mut cx, &filenames).iter().enumerate(){
     let path = Path::new(&filename);
     let typeface = match fs::read(path){
       Err(why) => {
         return cx.throw_error(format!("{}: \"{}\"", why, path.display()))
       },
-      Ok(bytes) => Typeface::from_data(Data::new_copy(&bytes), None)
+      Ok(bytes) => {
+        #[cfg(target_os = "windows")]
+        let bytes = {
+          fn decode_woff(bytes:&Vec<u8>) -> Option<Vec<u8>>{
+            let woff = ReadScope::new(&bytes).read::<WoffFont>().ok()?;
+            let tags = woff.table_tags()?;
+            whole_font(&woff, &tags).ok()
+          }
+
+          fn decode_woff2(bytes:&Vec<u8>) -> Option<Vec<u8>>{
+            let woff2 = ReadScope::new(&bytes).read::<Woff2Font>().ok()?;
+            let tables = woff2.table_provider(0).ok()?;
+            let tags = tables.table_tags()?;
+            whole_font(&tables, &tags).ok()
+          }
+
+          match filename.to_ascii_lowercase(){
+            name if name.ends_with(".woff") => decode_woff(&bytes),
+            name if name.ends_with(".woff2") => decode_woff2(&bytes),
+            _ => None
+          }
+        }.unwrap_or(bytes);
+
+        FONT_LIBRARY.lock().unwrap().mgr.new_from_data(&bytes, None)
+      }
     };
 
     match typeface {
@@ -652,10 +826,7 @@ pub fn addFamily(mut cx: FunctionContext) -> JsResult<JsValue> {
 pub fn reset(mut cx: FunctionContext) -> JsResult<JsUndefined> {
   let mut library = FONT_LIBRARY.lock().unwrap();
   library.fonts.clear();
-
-  let mut collection = FontCollection::new();
-  collection.set_default_font_manager(FontMgr::new(), None);
-  library.collection = collection;
+  library.collection = None;
   library.collection_cache.drain();
 
   Ok(cx.undefined())

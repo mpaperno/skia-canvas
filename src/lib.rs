@@ -1,3 +1,4 @@
+#![allow(unused_braces)]
 #![allow(clippy::unnecessary_wraps)]
 use std::sync::Mutex;
 use neon::prelude::*;
@@ -20,7 +21,7 @@ mod gui;
 use context::api as ctx;
 use typography::FontLibrary;
 
-pub static FONT_LIBRARY: Lazy<Mutex<FontLibrary>> = Lazy::new(|| FontLibrary::shared() );
+pub static FONT_LIBRARY: Lazy<Mutex<FontLibrary>> = Lazy::new(FontLibrary::shared);
 
 #[neon::main]
 fn main(mut cx: ModuleContext) -> NeonResult<()> {
@@ -32,8 +33,13 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
   cx.export_function("Image_set_src", image::set_src)?;
   cx.export_function("Image_set_data", image::set_data)?;
   cx.export_function("Image_load_pixel_data", image::load_pixel_data)?;
+  cx.export_function("Image_load_svg", image::load_svg)?;
   cx.export_function("Image_get_width", image::get_width)?;
+  cx.export_function("Image_set_width", image::set_width)?;
   cx.export_function("Image_get_height", image::get_height)?;
+  cx.export_function("Image_set_height", image::set_height)?;
+  cx.export_function("Image_get_naturalWidth", image::get_natural_width)?;
+  cx.export_function("Image_get_naturalHeight", image::get_natural_height)?;
   cx.export_function("Image_get_complete", image::get_complete)?;
 
   // -- Path2D ------------------------------------------------------------------------------------
@@ -205,8 +211,14 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
   cx.export_function("CanvasRenderingContext2D_set_textBaseline", ctx::set_textBaseline)?;
   cx.export_function("CanvasRenderingContext2D_get_direction", ctx::get_direction)?;
   cx.export_function("CanvasRenderingContext2D_set_direction", ctx::set_direction)?;
+  cx.export_function("CanvasRenderingContext2D_get_letterSpacing", ctx::get_letterSpacing)?;
+  cx.export_function("CanvasRenderingContext2D_set_letterSpacing", ctx::set_letterSpacing)?;
+  cx.export_function("CanvasRenderingContext2D_get_wordSpacing", ctx::get_wordSpacing)?;
+  cx.export_function("CanvasRenderingContext2D_set_wordSpacing", ctx::set_wordSpacing)?;
   cx.export_function("CanvasRenderingContext2D_get_fontVariant", ctx::get_fontVariant)?;
   cx.export_function("CanvasRenderingContext2D_set_fontVariant", ctx::set_fontVariant)?;
+  cx.export_function("CanvasRenderingContext2D_get_fontStretch", ctx::get_fontStretch)?;
+  cx.export_function("CanvasRenderingContext2D_set_fontStretch", ctx::set_fontStretch)?;
   cx.export_function("CanvasRenderingContext2D_get_textTracking", ctx::get_textTracking)?;
   cx.export_function("CanvasRenderingContext2D_set_textTracking", ctx::set_textTracking)?;
   cx.export_function("CanvasRenderingContext2D_get_textWrap", ctx::get_textWrap)?;

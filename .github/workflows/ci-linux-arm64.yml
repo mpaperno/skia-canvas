@@ -1,0 +1,109 @@
+name: Run Linux-arm64 build & tests
+on:
+  workflow_dispatch:
+
+jobs:
+
+  linux-arm64:
+    name: Build & Test
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # node: [ 18, 20, 22, latest ]
+        node: [ 22 ]
+        settings:
+          - target: 'aarch64-unknown-linux-gnu'
+            # arch: aarch64
+            setup: ''
+
+          - target: 'aarch64-unknown-linux-musl'
+            # arch: aarch64
+            setup: >-
+              echo "====== Install musl dev tools" && echo &&
+              apt-get install -y --no-install-recommends gcc musl-dev musl-tools && echo &&
+              echo "====== Setup environment for musl" &&
+              export PKG_CONFIG_ALLOW_CROSS=true &&
+              export PKG_CONFIG_ALL_STATIC=true &&
+              export TARGET="aarch64-unknown-linux-musl" &&
+              export CC=clang &&
+              export CXX=clang++ &&
+              export CFLAGS_aarch64_unknown_linux_musl="-nostdinc -nostdlib -isystem/usr/include/aarch64-linux-musl/" &&
+              export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc &&
+              export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_RUSTFLAGS="-C target-feature=-crt-static -C link-self-contained=yes -C linker=rust-lld -Clink-args=-L/usr/lib/aarch64-linux-musl/musl-gcc.specs" &&
+              export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_RUNNER="qemu-aarch64 -L /usr/lib/aarch64-linux-gnu" &&
+              export RUSTFLAGS="-C target-feature=-crt-static"
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: uraimo/run-on-arch-action@v2
+        name: Build On ${{ matrix.settings.target }} Node ${{ matrix.node }}
+        id: build-arm64
+        with:
+          arch: aarch64
+          distro: ubuntu22.04
+          env: |
+            target: ${{ matrix.settings.target }}
+            setup_script: '${{ matrix.settings.setup }}'
+            node_v: ${{ matrix.node }}
+            llvm_v: 18
+          run:  |
+            echo
+            echo "============  Run build for target ${target} Node ${node_v}  ============"
+            echo
+            echo "====== APT update and initial tools install"
+            apt-get update
+            apt-get install -y --no-install-recommends curl ca-certificates gpg-agent openssl wget gnupg software-properties-common
+            echo
+            echo "====== Getting LLVM toolchain"
+            wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
+            echo "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-${llvm_v} main" >> /etc/apt/sources.list
+            echo "deb-src http://apt.llvm.org/jammy/ llvm-toolchain-jammy-${llvm_v} main" >> /etc/apt/sources.list
+            echo "====== Getting Node v${node_v}"
+            curl -fsSL https://deb.nodesource.com/setup_${node_v}.x | bash -
+            echo
+            echo "====== APT install commmon tools"
+            apt-get update
+            apt-get install -y --fix-missing --no-install-recommends \
+              python2 python3 build-essential ninja-build git nodejs gnutls-bin \
+              clang-${llvm_v} llvm-${llvm_v} lld-${llvm_v} libc++-${llvm_v}-dev libc++abi-${llvm_v}-dev \
+              pkg-config fontconfig libfontconfig-dev libssl-dev libfontconfig1 libicu-dev
+            echo
+            echo "====== Setup toolchain"
+            ln -sf /usr/bin/clang-${llvm_v} /usr/bin/clang
+            ln -sf /usr/bin/clang++-${llvm_v} /usr/bin/clang++
+            ln -sf /usr/bin/lld-${llvm_v} /usr/bin/lld
+            ln -sf /usr/bin/clang-${llvm_v} /usr/bin/cc
+            echo
+            echo "====== Getting rustup"
+            curl -fsSL  https://sh.rustup.rs | sh -s -- -y --profile minimal --target=${target}
+            export PATH="$HOME/.cargo/bin:/opt/rust/cargo/bin:/usr/local/musl/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+            echo "PATH = $PATH"
+            echo
+            echo "====== Setup script for ${target}"
+            echo
+            eval "${setup_script}"
+            echo
+            echo "====== APT cleanup"
+            apt-get autoremove -y
+            echo "====== Confirm rustup has toolchain for ${target}"
+            rustup target add ${target}
+            echo
+            echo "====== Version checks"
+            git --version
+            echo "Node version: $(node --version)"
+            echo "NPM version: $(npm --version)"
+            echo
+            echo "====== Cargo update"
+            cargo update
+            echo
+            echo "====== NPM update"
+            npm ci --ignore-scripts
+            echo
+            echo "====== BUILD ====== "
+            echo
+            npm run build -- --release --features=vulkan,window,skia-safe/embed-freetype,skia-safe/freetype-woff2 --target=${target}
+            echo
+            echo "====== TEST ====== "
+            echo
+            npm test

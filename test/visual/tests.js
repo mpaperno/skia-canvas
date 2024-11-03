@@ -2,6 +2,7 @@
 
 var DOMMatrix
 var Image
+var Canvas
 var imageSrc
 var tests = {}
 var isWeb = false;
@@ -11,7 +12,10 @@ if (typeof module !== 'undefined' && module.exports) {
   let skCanvas = require('../../lib')
   Image = skCanvas.Image
   DOMMatrix = skCanvas.DOMMatrix
+  Canvas = skCanvas.Canvas
   imageSrc = function (filename) { return require('path').join(__dirname, '../assets', filename) }
+  skCanvas.FontLibrary.use(imageSrc("Monoton-Regular.woff2"))
+  // console.log(skCanvas.FontLibrary.has("Monoton"))
 } else {
   // @ts-expect-error We are creating a tests propery
   window.tests = tests
@@ -304,7 +308,15 @@ tests['quadraticCurveTo()'] = function (ctx) {
   ctx.stroke()
 }
 
-/** @param {skCanvas.CanvasRenderingContext2D} ctx */
+/**
+  @param {skCanvas.CanvasRenderingContext2D} ctx
+  @param {{
+    scl?: number
+    offset?: number
+    len?: number
+    cb?: ((a:number,b:number,c:number,d:number) => void) | null
+  }} options
+*/
 function drawPinwheel(ctx, {scl = 1, offset = 25, len = 65, cb = null} = {}) {
   ctx.translate(100, 100)
   ctx.scale(scl, scl)
@@ -327,14 +339,14 @@ tests['transform()'] = function (ctx) {
 
 /** @param {skCanvas.CanvasRenderingContext2D} ctx */
 tests['transform() with DOMMatrix'] = function (ctx) {
-  if (!isWeb)
-    drawPinwheel(ctx, { scl: .5, offset: 0, len:100, cb: (a,b,c,d) => ctx.transform(new DOMMatrix([a,b,c,d, 0, 0])) })
+  const cb = isWeb ? null : (a,b,c,d) => ctx.transform(new DOMMatrix([a,b,c,d, 0, 0]))
+  drawPinwheel(ctx, { scl: .5, offset: 0, len:100, cb })
 }
 
 /** @param {skCanvas.CanvasRenderingContext2D} ctx */
 tests['transform() with matrix-like object'] = function (ctx) {
-  if (!isWeb)
-    drawPinwheel(ctx, { scl: .5, offset: 0, len:100, cb: (a,b,c,d) => ctx.transform({a: a, b: b, c: c, d: d, e: 0, f: 0}) })
+  const cb = isWeb ? null : (a,b,c,d) => ctx.transform({a: a, b: b, c: c, d: d, e: 0, f: 0} )
+  drawPinwheel(ctx, { scl: .5, offset: 0, len:100, cb })
 }
 
 tests['rotate()'] = function (ctx) {
@@ -1101,6 +1113,20 @@ tests['strokeText() maxWidth argument'] = function (ctx) {
   ctx.strokeText('Drawing text can be fun!', 0, 20 * 7)
 }
 
+const TXT_MULTI =
+  "Lorem ipsum dolor sit amet,\n" +
+  "consectetur adipiscing elit,\n" +
+  "sed do eiusmod tempor incididunt\n" +
+  "ut labore et dolore magna aliqua.";
+
+tests['fillText() multiline'] = function (ctx) {
+  ctx.textWrap = true;  // non-standard
+  ctx.font = '12px/1.0 Helvetica, sans'
+  ctx.fillText(TXT_MULTI, 0, 20, 200)
+
+  // console.log(ctx.measureText(TXT_MULTI, 200))
+}
+
 tests['textAlign right'] = function (ctx) {
   ctx.strokeStyle = '#666'
   ctx.strokeRect(0, 0, 200, 200)
@@ -1374,6 +1400,66 @@ tests['font family Impact'] = function (ctx) {
   ctx.fillText('18px Impact', 100, 100)
 }
 
+tests['use custom font'] = function (ctx) {
+  ctx.strokeStyle = '#666'
+  ctx.strokeRect(0, 0, 200, 200)
+  ctx.lineTo(0, 100)
+  ctx.lineTo(200, 100)
+  ctx.stroke()
+
+  ctx.font = '26px Monoton'
+  ctx.textAlign = 'center'
+  ctx.fillText('Monoton', 100, 100)
+}
+
+tests['generic font family monospace'] = function (ctx) {
+  ctx.strokeStyle = '#666'
+  ctx.strokeRect(0, 0, 200, 200)
+  ctx.lineTo(0, 100)
+  ctx.lineTo(200, 100)
+  ctx.stroke()
+
+  ctx.font = '22px monospace, "Times New Roman", "Times", serif'
+  ctx.textAlign = 'center'
+  ctx.fillText('monospace iWlx', 100, 100)
+}
+
+tests['generic font family fallback serif'] = function (ctx) {
+  ctx.strokeStyle = '#666'
+  ctx.strokeRect(0, 0, 200, 200)
+  ctx.lineTo(0, 100)
+  ctx.lineTo(200, 100)
+  ctx.stroke()
+
+  ctx.font = '24px None_suchFont, serif, Arial, monospace'
+  ctx.textAlign = 'center'
+  ctx.fillText('serif fallback', 100, 100)
+}
+
+tests['generic font family fallback sans-serif'] = function (ctx) {
+  ctx.strokeStyle = '#666'
+  ctx.strokeRect(0, 0, 200, 200)
+  ctx.lineTo(0, 100)
+  ctx.lineTo(200, 100)
+  ctx.stroke()
+
+  ctx.font = '24px None_suchFont, sans-serif, "Times New Roman", "Times", monospace'
+  ctx.textAlign = 'center'
+  ctx.fillText('sans-serif fallback', 100, 100)
+}
+
+tests['generic font family fallback system-ui'] = function (ctx) {
+  ctx.strokeStyle = '#666'
+  ctx.strokeRect(0, 0, 200, 200)
+  ctx.lineTo(0, 100)
+  ctx.lineTo(200, 100)
+  ctx.stroke()
+
+  ctx.font = '24px None_suchFont, system-ui, "Times New Roman", "Times", serif'
+  ctx.textAlign = 'center'
+  ctx.fillText('system-ui fallback', 100, 100)
+}
+
 tests['font family invalid'] = function (ctx) {
   ctx.strokeStyle = '#666'
   ctx.strokeRect(0, 0, 200, 200)
@@ -1396,6 +1482,119 @@ tests['font style variant weight size family'] = function (ctx) {
   ctx.font = 'normal normal normal 16px Impact'
   ctx.textAlign = 'center'
   ctx.fillText('normal normal normal 16px', 100, 100)
+}
+
+tests['textBaseline and scale'] = function (ctx) {
+  ctx.strokeStyle = '#666'
+  ctx.strokeRect(0, 0, 200, 200)
+  ctx.lineTo(0, 50)
+  ctx.lineTo(200, 50)
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.lineTo(0, 150)
+  ctx.lineTo(200, 150)
+  ctx.stroke()
+
+  ctx.font = 'normal 20px Arial'
+  ctx.textBaseline = 'bottom'
+  ctx.textAlign = 'center'
+  ctx.fillText('bottom', 100, 50)
+
+  ctx.scale(0.1, 0.1)
+  ctx.font = 'normal 200px Arial'
+  ctx.textBaseline = 'bottom'
+  ctx.textAlign = 'center'
+  ctx.fillText('bottom', 1000, 1500)
+}
+
+tests['rotated baseline'] = function (ctx) {
+  ctx.font = '12px Arial'
+  ctx.fillStyle = 'black'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'bottom'
+  ctx.translate(100, 100)
+
+  for (var i = 0; i < 16; i++) {
+    ctx.fillText('Hello world!', -50, -50)
+    ctx.rotate(-Math.PI / 8)
+  }
+}
+
+tests['rotated and scaled baseline'] = function (ctx) {
+  ctx.font = '120px Arial'
+  ctx.fillStyle = 'black'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'bottom'
+  ctx.translate(100, 100)
+  ctx.scale(0.1, 0.2)
+
+  for (var i = 0; i < 16; i++) {
+    ctx.fillText('Hello world!', -50 / 0.1, -50 / 0.2)
+    ctx.rotate(-Math.PI / 8)
+  }
+}
+
+tests['rotated and skewed baseline'] = function (ctx) {
+  ctx.font = '12px Arial'
+  ctx.fillStyle = 'black'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'bottom'
+  ctx.translate(100, 100)
+  ctx.transform(1, 1, 0, 1, 1, 1)
+
+  for (var i = 0; i < 16; i++) {
+    ctx.fillText('Hello world!', -50, -50)
+    ctx.rotate(-Math.PI / 8)
+  }
+}
+
+tests['rotated, scaled and skewed baseline'] = function (ctx) {
+  // Known issue: we don't have a way to decompose the cairo matrix into the
+  // skew and rotation separately.
+  ctx.font = '120px Arial'
+  ctx.fillStyle = 'black'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'bottom'
+  ctx.translate(100, 100)
+  ctx.scale(0.1, 0.2)
+  ctx.transform(1, 1, 0, 1, 1, 1)
+
+  for (var i = 0; i < 16; i++) {
+    ctx.fillText('Hello world!', -50 / 0.1, -50 / 0.2)
+    ctx.rotate(-Math.PI / 8)
+  }
+}
+
+tests['measureText()'] = function (ctx) {
+  function drawWithBBox (text, x, y) {
+    ctx.fillText(text, x, y)
+    ctx.strokeStyle = 'red'
+    ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(200, y + 0.5); ctx.stroke()
+    var metrics = ctx.measureText(text)
+    ctx.strokeStyle = 'blue'
+    ctx.strokeRect(
+      x - metrics.actualBoundingBoxLeft + 0.5,
+      y - metrics.actualBoundingBoxAscent + 0.5,
+      metrics.width,
+      metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent
+    )
+    // console.log(text, metrics);
+  }
+
+  ctx.font = '20px/1.0 Arial'
+  ctx.textBaseline = 'alphabetic'
+  drawWithBBox('Alphabet alphabetic', 20, 50)
+
+  drawWithBBox('weruoasnm', 50, 175) // no ascenders/descenders
+
+  drawWithBBox(',', 100, 125) // tiny height
+
+  ctx.textBaseline = 'bottom'
+  drawWithBBox('Alphabet bottom', 20, 90)
+
+  ctx.textBaseline = 'alphabetic'
+  ctx.rotate(Math.PI / 8)
+  drawWithBBox('Alphabet', 50, 100)
 }
 
 // From https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/globalCompositeOperation
@@ -1559,8 +1758,22 @@ tests['known bug #416'] = function (ctx, done) {
   img1.src = imageSrc('blend-bg.png')
 }
 
-function drawShadowPattern(ctx, { color = '#c00', offset = [0,0], blur = 5 } = { }) {
-  ctx.fillRect(150, 10, 20, 20)
+/**
+  @param {CanvasRenderingContext2D} ctx
+  @param {{
+    color?: string
+    offset?: [number,number]
+    blur?: number
+    color2?: string | null
+    stroke?: boolean
+    rectCb?: ((a:number,b:number,c:number,d:number) => void) | null
+  }} options
+*/
+function drawShadowPattern(ctx, { color = '#c00', offset = [0,0], blur = 5, color2 = null, stroke = false, rectCb =null } = { }) {
+
+  const rectFn = stroke ? 'strokeRect' : 'fillRect'
+
+  ctx[rectFn](150, 10, 20, 20)
 
   ctx.lineTo(20, 5)
   ctx.lineTo(100, 5)
@@ -1570,21 +1783,27 @@ function drawShadowPattern(ctx, { color = '#c00', offset = [0,0], blur = 5 } = {
   ctx.shadowBlur = blur
   ctx.shadowOffsetX = offset[0]
   ctx.shadowOffsetY = offset[1]
-  ctx.fillRect(20, 20, 100, 100)
+  if (rectCb)
+    rectCb(20, 20, 100, 100)
+  else
+    ctx[rectFn](20, 20, 100, 100)
 
   ctx.beginPath()
   ctx.lineTo(20, 150)
   ctx.lineTo(100, 150)
   ctx.stroke()
 
-  ctx.shadowBlur = 0
+  if (color2)
+    ctx.shadowColor = color2
+  else
+    ctx.shadowBlur = 0
 
   ctx.beginPath()
   ctx.lineTo(20, 180)
   ctx.lineTo(100, 180)
   ctx.stroke()
 
-  ctx.fillRect(150, 150, 20, 20)
+  ctx[rectFn](150, 150, 20, 20)
 }
 
 tests['shadowBlur'] = function (ctx) {
@@ -1605,6 +1824,34 @@ tests['shadowOffset{X,Y} large'] = function (ctx) {
 
 tests['shadowOffset{X,Y} negative'] = function (ctx) {
   drawShadowPattern(ctx, { offset: [-10,-10] })
+}
+
+tests['shadowBlur values'] = function (ctx) {
+  drawShadowPattern(ctx, { blur: 25, offset: [2,2], color2: 'rgba(0,0,0,0)' })
+}
+
+tests['shadow strokeRect()'] = function (ctx) {
+  drawShadowPattern(ctx, { stroke: true, offset: [2,2], color: '#000', color2: 'rgba(0,0,0,0)' })
+}
+
+tests['shadow fill()'] = function (ctx) {
+  drawShadowPattern(ctx, {
+    stroke: true, offset: [2,2], color: '#000', color2: 'rgba(0,0,0,0)',
+    rectCb: (x,y,w,h) => {
+      ctx.rect(x,y,w,h)
+      ctx.fill()
+    }
+  })
+}
+
+tests['shadow stroke()'] = function (ctx) {
+  drawShadowPattern(ctx, {
+    stroke: true, offset: [2,2], color: '#000', color2: 'rgba(0,0,0,0)',
+    rectCb: (x,y,w,h) => {
+      ctx.rect(x,y,w,h)
+      ctx.stroke()
+    }
+  })
 }
 
 tests['shadow translate, scale & rotate'] = function (ctx) {
@@ -1675,120 +1922,6 @@ tests['shadowBlur skew & varying scale'] = function (ctx) {
 tests['drop-shadow filter with scale'] = function (ctx) {
   ctx.filter = 'drop-shadow(5px 5px 6px #c00)';
   drawScaledBoxes(ctx);
-}
-
-tests['shadowBlur values'] = function (ctx) {
-  ctx.fillRect(150, 10, 20, 20)
-
-  ctx.lineTo(20, 5)
-  ctx.lineTo(100, 5)
-  ctx.stroke()
-
-  ctx.shadowColor = '#c00'
-  ctx.shadowBlur = 25
-  ctx.shadowOffsetX = 2
-  ctx.shadowOffsetY = 2
-  ctx.fillRect(20, 20, 100, 100)
-
-  ctx.beginPath()
-  ctx.lineTo(20, 150)
-  ctx.lineTo(100, 150)
-  ctx.stroke()
-
-  ctx.shadowColor = 'rgba(0,0,0,0)'
-
-  ctx.beginPath()
-  ctx.lineTo(20, 180)
-  ctx.lineTo(100, 180)
-  ctx.stroke()
-
-  ctx.fillRect(150, 150, 20, 20)
-}
-
-tests['shadow strokeRect()'] = function (ctx) {
-  ctx.strokeRect(150, 10, 20, 20)
-
-  ctx.lineTo(20, 5)
-  ctx.lineTo(100, 5)
-  ctx.stroke()
-
-  ctx.shadowColor = '#000'
-  ctx.shadowBlur = 5
-  ctx.shadowOffsetX = 2
-  ctx.shadowOffsetY = 2
-  ctx.strokeRect(20, 20, 100, 100)
-
-  ctx.beginPath()
-  ctx.lineTo(20, 150)
-  ctx.lineTo(100, 150)
-  ctx.stroke()
-
-  ctx.shadowColor = 'rgba(0,0,0,0)'
-
-  ctx.beginPath()
-  ctx.lineTo(20, 180)
-  ctx.lineTo(100, 180)
-  ctx.stroke()
-
-  ctx.strokeRect(150, 150, 20, 20)
-}
-
-tests['shadow fill()'] = function (ctx) {
-  ctx.strokeRect(150, 10, 20, 20)
-
-  ctx.lineTo(20, 5)
-  ctx.lineTo(100, 5)
-  ctx.stroke()
-
-  ctx.shadowColor = '#000'
-  ctx.shadowBlur = 5
-  ctx.shadowOffsetX = 2
-  ctx.shadowOffsetY = 2
-  ctx.rect(20, 20, 100, 100)
-  ctx.fill()
-
-  ctx.beginPath()
-  ctx.lineTo(20, 150)
-  ctx.lineTo(100, 150)
-  ctx.stroke()
-
-  ctx.shadowColor = 'rgba(0,0,0,0)'
-
-  ctx.beginPath()
-  ctx.lineTo(20, 180)
-  ctx.lineTo(100, 180)
-  ctx.stroke()
-
-  ctx.strokeRect(150, 150, 20, 20)
-}
-
-tests['shadow stroke()'] = function (ctx) {
-  ctx.strokeRect(150, 10, 20, 20)
-
-  ctx.lineTo(20, 5)
-  ctx.lineTo(100, 5)
-  ctx.stroke()
-
-  ctx.shadowColor = '#000'
-  ctx.shadowBlur = 5
-  ctx.shadowOffsetX = 2
-  ctx.shadowOffsetY = 2
-  ctx.rect(20, 20, 100, 100)
-  ctx.stroke()
-
-  ctx.beginPath()
-  ctx.lineTo(20, 150)
-  ctx.lineTo(100, 150)
-  ctx.stroke()
-
-  ctx.shadowColor = 'rgba(0,0,0,0)'
-
-  ctx.beginPath()
-  ctx.lineTo(20, 180)
-  ctx.lineTo(100, 180)
-  ctx.stroke()
-
-  ctx.strokeRect(150, 150, 20, 20)
 }
 
 tests['shadow globalAlpha'] = function (ctx) {
@@ -2124,7 +2257,11 @@ tests['font state'] = function (ctx) {
   ctx.fillText('Boom again!', 50, 140)
 }
 
-tests['drawImage(img,0,0)'] = function (ctx, done) {
+//
+// Images
+//
+
+tests['drawImage() PNG'] = function (ctx, done) {
   var img = new Image()
   img.onload = function () {
     ctx.drawImage(img, 0, 0)
@@ -2134,7 +2271,7 @@ tests['drawImage(img,0,0)'] = function (ctx, done) {
   img.src = imageSrc('state.png')
 }
 
-tests['drawImage(img) jpeg'] = function (ctx, done) {
+tests['drawImage() jpeg'] = function (ctx, done) {
   var img = new Image()
   img.onload = function () {
     ctx.drawImage(img, 0, 0, 100, 100)
@@ -2144,7 +2281,7 @@ tests['drawImage(img) jpeg'] = function (ctx, done) {
   img.src = imageSrc('globe.jpg')
 }
 
-tests['drawImage(img) CMYK JPEG'] = function (ctx, done) {
+tests['drawImage() CMYK JPEG'] = function (ctx, done) {
   // This also provides coverage for CMYK JPEGs
   var img = new Image()
   img.onload = function () {
@@ -2155,7 +2292,7 @@ tests['drawImage(img) CMYK JPEG'] = function (ctx, done) {
   img.src = imageSrc('pentagon-cmyk.jpg')
 }
 
-tests['drawImage(img) grayscale JPEG'] = function (ctx, done) {
+tests['drawImage() grayscale JPEG'] = function (ctx, done) {
   var img = new Image()
   img.onload = function () {
     ctx.drawImage(img, 0, 0, 100, 100)
@@ -2165,41 +2302,94 @@ tests['drawImage(img) grayscale JPEG'] = function (ctx, done) {
   img.src = imageSrc('pentagon-grayscale.jpg')
 }
 
-// tests['drawImage(img) svg'] = function (ctx, done) {
-//   var img = new Image()
-//   img.onload = function () {
-//     ctx.drawImage(img, 0, 0, 100, 100)
-//     done(null)
-//   }
-//   img.onerror = done
-//   img.src = imageSrc('tree.svg')
-// }
+tests['drawImage() webp'] = function (ctx, done) {
+  var img = new Image()
+  img.onload = function () {
+    ctx.drawImage(img, 0, 0, 200, 200)
+    done(null)
+  }
+  img.onerror = done
+  img.src = imageSrc('rose.webp')
+}
 
-// tests['drawImage(img) svg with scaling from drawImage'] = function (ctx, done) {
-//   var img = new Image()
-//   img.onload = function () {
-//     ctx.drawImage(img, -800, -800, 1000, 1000)
-//     done(null)
-//   }
-//   img.onerror = done
-//   img.src = imageSrc('tree.svg')
-// }
+tests['drawImage() SVG'] = function (ctx, done) {
+  var img = new Image()
+  img.onload = function () {
+    ctx.drawImage(img, 0, 0)
+    done(null)
+  }
+  img.onerror = done
+  img.src = imageSrc('tree.svg')
+}
 
-// tests['drawImage(img) svg with scaling from ctx'] = function (ctx, done) {
-//   var img = new Image()
-//   img.onload = function () {
-//     ctx.scale(100, 100)
-//     ctx.drawImage(img, -8, -8, 10, 10)
-//     done(null)
-//   }
-//   img.onerror = done
-//   img.src = imageSrc('tree.svg')
-// }
+tests['drawImage() SVG gradients/alpha'] = function (ctx, done) {
+  var img = new Image()
+  img.onload = function () {
+    ctx.drawImage(img, 0, 0, ctx.canvas.width, ctx.canvas.height)
+    done(null)
+  }
+  img.onerror = done
+  img.src = imageSrc('grapes.svg')
+}
+
+tests['drawImage() SVG from URL w/ patterns/effects'] = function (ctx, done) {
+  var img = new Image()
+  img.onload = function () {
+    ctx.drawImage(img, 0, 0, ctx.canvas.width, ctx.canvas.height)
+    done(null)
+  }
+  img.onerror = done
+  img.src = 'https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/rg1024_metal_effect.svg'
+}
+
+tests['drawImage() raw'] = function (ctx, done) {
+  if (isWeb) {
+    done(null)
+    return
+  }
+  var img = new Image({
+    raw: {
+      width: 125,
+      height: 125,
+      colorType: 'rgba'
+    }
+  })
+  img.onload = function () {
+    ctx.drawImage(img, 0, 0, 125, 125)
+    done(null)
+  }
+  img.onerror = done
+  img.src = imageSrc('pentagon.raw')
+}
+
+//
+// drawImage() variations
+//
 
 tests['drawImage(img,x,y)'] = function (ctx, done) {
   var img = new Image()
   img.onload = function () {
-    ctx.drawImage(img, 5, 25)
+    ctx.drawImage(img, 25, 25)
+    done(null)
+  }
+  img.onerror = done
+  img.src = imageSrc('state.png')
+}
+
+tests['drawImage(img,x,y) with Image(w,h)'] = function (ctx, done) {
+  var img = new Image(50,75)
+  img.onload = function () {
+    ctx.drawImage(this, 25, 25)
+    done(null)
+  }
+  img.onerror = done
+  img.src = imageSrc('state.png')
+}
+
+tests['drawImage(img,x,y,img.w,img.h) with Image(w,h)'] = function (ctx, done) {
+  var img = new Image(50,75)
+  img.onload = function () {
+    ctx.drawImage(this, 25, 25, this.width, this.height)
     done(null)
   }
   img.onerror = done
@@ -2257,6 +2447,21 @@ tests['drawImage(img,sx,sy,sw,sh,x,y,w,h)'] = function (ctx, done) {
   img.src = imageSrc('state.png')
 }
 
+tests['drawCanvas(img,sx,sy,sw,sh,x,y,w,h)'] = function (ctx, done) {
+  if (!Canvas) {
+    return tests['drawImage(img,sx,sy,sw,sh,x,y,w,h)'](ctx, done)
+  }
+  var img = new Image()
+  img.onload = function () {
+    const srcCtx = new Canvas(200,200).getContext('2d');
+    srcCtx.drawImage(img, 0, 0);
+    ctx.drawCanvas(srcCtx.canvas, 13, 13, 45, 45, 25, 25, img.width / 2, img.height / 2)
+    done(null)
+  }
+  img.onerror = done
+  img.src = imageSrc('state.png')
+}
+
 tests['drawImage(img,0,0) globalAlpha'] = function (ctx, done) {
   var img = new Image()
   ctx.fillRect(50, 50, 30, 30)
@@ -2283,6 +2488,318 @@ tests['drawImage(img,0,0) clip'] = function (ctx, done) {
   img.onerror = done
   img.src = imageSrc('state.png')
 }
+
+//
+// SVG sizing, scaling and transform
+//
+
+const SVG_IMG = `
+<svg id='svg1' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'>
+  <circle r="32" cx="35" cy="65" fill="#F00" opacity="0.5"/>
+  <circle r="32" cx="65" cy="65" fill="#0F0" opacity="0.5"/>
+  <circle r="32" cx="50" cy="35" fill="#00F" opacity="0.5"/>
+</svg>`;
+
+const SVG_TXT = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <path d="M30,1h40l29,29v40l-29,29h-40l-29-29v-40z" stroke="#000" fill="none"/>
+  <path d="M31,3h38l28,28v38l-28,28h-38l-28-28v-38z" fill="#a23"/>
+  <text x="50" y="68" font-family="Consolas, Menlo, monospace" font-size="48" fill="#FFF" text-anchor="middle"><![CDATA[410]]></text>
+</svg>`;
+
+function addSvgSize(src, w, h) {
+  return src.replace(/>$/m, ` width="${w}" height="${h}">`)
+}
+
+tests['drawImage() SVG with offset'] = function (ctx, done) {
+  var img = new Image()
+  img.onload = function () {
+    ctx.drawImage(img, 25, 25)
+    done(null)
+  }
+  img.onerror = done
+  img.src = imageSrc('tree.svg')
+}
+
+tests['drawImage() SVG from Image(w,h)'] = function (ctx, done) {
+  var img = new Image(200,  200)
+  img.onload = function () {
+    ctx.drawImage(img, 0, 0)
+    done(null)
+  }
+  img.onerror = done
+  img.src = imageSrc('tree.svg')
+}
+
+tests['drawImage(img,x,y,img.w,img.h) SVG with scaling from Image(w,h)'] = function (ctx, done) {
+  var img = new Image(1000, 1000);
+  img.onload = function () {
+    ctx.drawImage(this, -350, -350 , this.width, this.height)
+    // console.log(this.width, this.height, this.naturalWidth, this.naturalHeight)
+    done(null)
+  }
+  img.onerror = done
+  img.src = imageSrc('tree.svg')
+}
+
+tests['drawImage() SVG natural size with scaling from drawImage'] = function (ctx, done) {
+  var img = new Image()
+  img.onload = function () {
+    ctx.drawImage(img, -350, -350, 1000, 1000)
+    done(null)
+  }
+  img.onerror = done
+  img.src = imageSrc('tree.svg')
+}
+
+tests['drawImage() SVG natural size with scaling from ctx'] = function (ctx, done) {
+  var img = new Image()
+  img.onload = function () {
+    ctx.scale(10, 10)
+    ctx.drawImage(img, -35, -35)
+    done(null)
+  }
+  img.onerror = (e) => { console.log(e); done(e); }
+  img.src = imageSrc('tree.svg')
+}
+
+tests['SVG no natural size from Image() w/ drawImage(img,0,0)'] = function (ctx, done) {
+  var img = new Image()
+  img.onload = function () {
+    ctx.drawImage(img, 0, 0 /*, this.width, this.height */)
+    // console.log(this.width, this.height, this.naturalWidth, this.naturalHeight)
+    done(null)
+  }
+  img.onerror = done
+  img.src = `data:image/svg+xml;utf8,${encodeURIComponent(SVG_IMG)}`;
+}
+
+tests['SVG no natural size from Image() w/ drawImage(img,0,0,img.w,img.h)'] = function (ctx, done) {
+  var img = new Image()
+  img.onload = function () {
+    ctx.drawImage(img, 0, 0, this.width, this.height)
+    // console.log(this.width, this.height, this.naturalWidth, this.naturalHeight)
+    done(null)
+  }
+  img.onerror = done
+  img.src = `data:image/svg+xml;utf8,${encodeURIComponent(SVG_IMG)}`;
+}
+
+tests['SVG no natural size from Image(w,h) w/ drawImage(img,0,0)'] = function (ctx, done) {
+  var img = new Image(100, 100)
+  img.onload = function () {
+    ctx.drawImage(img, 0, 0)
+    // console.log(this.width, this.height, this.naturalWidth, this.naturalHeight)
+    done(null)
+  }
+  img.onerror = done
+  img.src = `data:image/svg+xml;utf8,${encodeURIComponent(SVG_IMG)}`;
+}
+
+tests['SVG no natural size from Image(w,h) w/ drawImage(img,0,0,img.w,img.h)'] = function (ctx, done) {
+  var img = new Image(100, 100)
+  img.onload = function () {
+    ctx.drawImage(img, 0, 0, this.width, this.height)
+    // console.log(this.width, this.height, this.naturalWidth, this.naturalHeight)
+    done(null)
+  }
+  img.onerror = done
+  img.src = `data:image/svg+xml;utf8,${encodeURIComponent(SVG_IMG)}`;
+}
+
+tests['drawImage() SVG from string'] = function (ctx, done) {
+  var img = new Image(ctx.canvas.width, ctx.canvas.height)
+  img.onload = function () {
+    ctx.drawImage(img, 0, 0 , this.width, this.height)
+    // console.log(this.width, this.height, this.naturalWidth, this.naturalHeight)
+    done(null)
+  }
+  img.onerror = done
+  img.src = `data:image/svg+xml;utf8,${encodeURIComponent(SVG_IMG)}`
+}
+
+tests['drawImage() SVG from base64'] = function (ctx, done) {
+  var img = new Image(200,  200)
+  img.onload = function () {
+    ctx.drawImage(img, 0, 0, this.width, this.height)
+    done(null)
+  }
+  img.onerror = done
+  img.src = `data:image/svg+xml;base64,${btoa(SVG_IMG)}`;
+}
+
+tests['drawImage() SVG from remote URL'] = function (ctx, done) {
+  var img = new Image(200,  200)
+  img.onload = function () {
+    ctx.drawImage(img, 0, 0, this.width, this.height)
+    done(null)
+  }
+  img.onerror = done
+  img.src = 'https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/alphachannel.svg'
+}
+
+tests['drawImage() SVG with font'] = function (ctx, done) {
+  var img = new Image(200,  200)
+  img.onload = function () {
+    ctx.drawImage(img, 0, 0, this.width, this.height)
+    done(null)
+  }
+  img.onerror = done
+  img.src = `data:image/svg+xml;utf8,${encodeURIComponent(SVG_TXT)}`
+}
+
+tests['SVG no natural size drawImage(img,sx,sy,sw,sh,x,y,w,h)'] = function (ctx, done) {
+  var img = new Image(150,150)
+  img.onload = function () {
+    ctx.drawImage(img, 0, 0, img.width / 2, img.height / 2, 0, 0, img.width / 2, img.height / 2)
+    done(null)
+  }
+  img.onerror = done
+  img.src = `data:image/svg+xml;utf8,${encodeURIComponent(SVG_TXT)}`
+}
+
+tests['SVG with natural size drawImage(img,sx,sy,sw,sh,x,y,w,h)'] = function (ctx, done) {
+  var img = new Image(150, 150)
+  img.onload = function () {
+    ctx.drawImage(img, 0, 0, img.width / 2, img.height / 2, 0, 0, img.width / 2, img.height / 2)
+    done(null)
+  }
+  img.onerror = done
+  img.src = `data:image/svg+xml;utf8,${encodeURIComponent(addSvgSize(SVG_TXT, 150, 150))}`
+}
+
+tests['SVG with natural size drawImage(img,sx,sy,sw,sh,x,y,w,h) with scaling'] = function (ctx, done) {
+  var img = new Image()
+  img.onload = function () {
+    ctx.drawImage(img, 25, 25, 100, 100, 0, 0, 190, 190)
+    done(null)
+  }
+  img.onerror = done
+  img.src = `data:image/svg+xml;utf8,${encodeURIComponent(addSvgSize(SVG_TXT, 200, 200))}`
+}
+
+tests['createPattern() from SVG with natural size'] = function (ctx, done) {
+  var img = new Image()
+  img.onload = function () {
+    var pattern = ctx.createPattern(img, 'repeat')
+    ctx.scale(0.1, 0.1)
+    ctx.fillStyle = pattern
+    ctx.fillRect(100, 100, 800, 800)
+    ctx.strokeStyle = pattern
+    ctx.lineWidth = 200
+    ctx.strokeRect(1100, 1100, 800, 800)
+    done()
+  }
+  img.src = `data:image/svg+xml;utf8,${encodeURIComponent(addSvgSize(SVG_IMG, 200, 200))}`
+}
+
+tests['createPattern() from SVG no natural size'] = function (ctx, done) {
+  var img = new Image()
+  img.onload = function () {
+    var pattern = ctx.createPattern(img, 'repeat')
+    ctx.scale(0.1, 0.1)
+    ctx.fillStyle = pattern
+    ctx.fillRect(100, 100, 800, 800)
+    ctx.strokeStyle = pattern
+    ctx.lineWidth = 200
+    ctx.strokeRect(1100, 1100, 800, 800)
+    done()
+  }
+  img.src = `data:image/svg+xml;utf8,${encodeURIComponent(SVG_IMG)}`
+}
+
+tests['SVG shadow & filters'] = function (ctx, done) {
+  var img = new Image(/* 200,  200 */)
+  img.onload = function () {
+    ctx.drawImage(img, 0, 0 , 200, 200)
+    done(null)
+  }
+  ctx.shadowBlur = 5
+  ctx.shadowOffsetX = 5
+  ctx.shadowOffsetY = 7
+  ctx.shadowColor = 'black'
+
+  ctx.filter = "blur(1px) hue-rotate(90deg) saturate(4893%)"
+
+  img.onerror = done
+  img.src = imageSrc('grapes.svg')
+}
+
+tests['SVG globalCompositeOperator SVG under'] = function (ctx, done) {
+  var img1 = new Image()
+  var img2 = new Image()
+  img1.onload = function () {
+    img2.onload = function () {
+      ctx.globalAlpha = 0.7
+      ctx.drawImage(img1, 0, 0, ctx.canvas.width, ctx.canvas.height)
+      ctx.globalCompositeOperation = 'difference'
+      ctx.translate(100, 100)
+      ctx.rotate(.25*Math.PI)
+      ctx.translate(-50, -75)
+      ctx.scale(.8, .8)
+      ctx.drawImage(img2, 50, 50)
+      done()
+    }
+    img2.src = imageSrc('blend-fg.png')
+  }
+  img1.src = imageSrc('grapes.svg')
+}
+
+tests['SVG globalCompositeOperator SCG over'] = function (ctx, done) {
+  var img1 = new Image()
+  var img2 = new Image()
+  img1.onload = function () {
+    img2.onload = function () {
+      ctx.globalAlpha = 0.7
+      ctx.translate(100, 100)
+      ctx.rotate(.25*Math.PI)
+      ctx.translate(-50, -75)
+      ctx.scale(.8, .8)
+      ctx.drawImage(img1, 50, 50)
+      ctx.globalCompositeOperation = 'difference'
+      ctx.resetTransform()
+      ctx.drawImage(img2, 0, 0, ctx.canvas.width, ctx.canvas.height)
+      done()
+    }
+    img2.src = imageSrc('grapes.svg')
+  }
+  img1.src = imageSrc('blend-fg.png')
+}
+
+tests['SVG globalCompositeOperator xor'] = function (ctx, done) {
+  var img1 = new Image()
+  var img2 = new Image()
+  img1.onload = function () {
+    img2.onload = function () {
+      ctx.globalAlpha = 0.7
+      ctx.drawImage(img1, 0, 0, ctx.canvas.width, ctx.canvas.height)
+      ctx.globalCompositeOperation = 'xor'
+      ctx.drawImage(img2, 50, 50)
+      done()
+    }
+    img2.src = imageSrc('blend-fg.png')
+  }
+  img1.src = imageSrc('grapes.svg')
+}
+
+tests['SVG globalAlpha + clip'] = function (ctx, done) {
+  ctx.arc(100, 100, 75, 0, Math.PI * 2, false)
+  ctx.stroke()
+  ctx.clip()
+  var img = new Image()
+  ctx.fillRect(50, 50, 30, 30)
+  ctx.globalAlpha = 0.5
+  img.onload = function () {
+    ctx.drawImage(img, 0, 0, ctx.canvas.width, ctx.canvas.height)
+    done(null)
+  }
+  img.onerror = done
+  img.src = imageSrc('grapes.svg')
+}
+
+//
+// ImageData
+//
 
 tests['putImageData()'] = function (ctx) {
   for (var i = 0; i < 6; i++) {
@@ -2602,121 +3119,6 @@ tests['fillStyle=\'hsla(...)\''] = function (ctx) {
   }
 }
 
-// tests['textBaseline and scale'] = function (ctx) {
-//   ctx.strokeStyle = '#666'
-//   ctx.strokeRect(0, 0, 200, 200)
-//   ctx.lineTo(0, 50)
-//   ctx.lineTo(200, 50)
-//   ctx.stroke()
-//   ctx.beginPath()
-//   ctx.lineTo(0, 150)
-//   ctx.lineTo(200, 150)
-//   ctx.stroke()
-
-//   ctx.font = 'normal 20px Arial'
-//   ctx.textBaseline = 'bottom'
-//   ctx.textAlign = 'center'
-//   ctx.fillText('bottom', 100, 50)
-
-//   ctx.scale(0.1, 0.1)
-//   ctx.font = 'normal 200px Arial'
-//   ctx.textBaseline = 'bottom'
-//   ctx.textAlign = 'center'
-//   ctx.fillText('bottom', 1000, 1500)
-// }
-
-// tests['rotated baseline'] = function (ctx) {
-//   ctx.font = '12px Arial'
-//   ctx.fillStyle = 'black'
-//   ctx.textAlign = 'center'
-//   ctx.textBaseline = 'bottom'
-//   ctx.translate(100, 100)
-
-//   for (var i = 0; i < 16; i++) {
-//     ctx.fillText('Hello world!', -50, -50)
-//     ctx.rotate(-Math.PI / 8)
-//   }
-// }
-
-// tests['rotated and scaled baseline'] = function (ctx) {
-//   ctx.font = '120px Arial'
-//   ctx.fillStyle = 'black'
-//   ctx.textAlign = 'center'
-//   ctx.textBaseline = 'bottom'
-//   ctx.translate(100, 100)
-//   ctx.scale(0.1, 0.2)
-
-//   for (var i = 0; i < 16; i++) {
-//     ctx.fillText('Hello world!', -50 / 0.1, -50 / 0.2)
-//     ctx.rotate(-Math.PI / 8)
-//   }
-// }
-
-// tests['rotated and skewed baseline'] = function (ctx) {
-//   ctx.font = '12px Arial'
-//   ctx.fillStyle = 'black'
-//   ctx.textAlign = 'center'
-//   ctx.textBaseline = 'bottom'
-//   ctx.translate(100, 100)
-//   ctx.transform(1, 1, 0, 1, 1, 1)
-
-//   for (var i = 0; i < 16; i++) {
-//     ctx.fillText('Hello world!', -50, -50)
-//     ctx.rotate(-Math.PI / 8)
-//   }
-// }
-
-// tests['rotated, scaled and skewed baseline'] = function (ctx) {
-//   // Known issue: we don't have a way to decompose the cairo matrix into the
-//   // skew and rotation separately.
-//   ctx.font = '120px Arial'
-//   ctx.fillStyle = 'black'
-//   ctx.textAlign = 'center'
-//   ctx.textBaseline = 'bottom'
-//   ctx.translate(100, 100)
-//   ctx.scale(0.1, 0.2)
-//   ctx.transform(1, 1, 0, 1, 1, 1)
-
-//   for (var i = 0; i < 16; i++) {
-//     ctx.fillText('Hello world!', -50 / 0.1, -50 / 0.2)
-//     ctx.rotate(-Math.PI / 8)
-//   }
-// }
-
-// tests['measureText()'] = function (ctx) {
-//   // Note: As of Sep 2017, Chrome is the only browser with advanced TextMetrics,
-//   // and they're behind a flag, and a few of them are missing and others are
-//   // wrong.
-//   function drawWithBBox (text, x, y) {
-//     ctx.fillText(text, x, y)
-//     ctx.strokeStyle = 'red'
-//     ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(200, y + 0.5); ctx.stroke()
-//     var metrics = ctx.measureText(text)
-//     ctx.strokeStyle = 'blue'
-//     ctx.strokeRect(
-//       x - metrics.actualBoundingBoxLeft + 0.5,
-//       y - metrics.actualBoundingBoxAscent + 0.5,
-//       metrics.width,
-//       metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent
-//     )
-//   }
-
-//   ctx.font = '20px Arial'
-//   ctx.textBaseline = 'alphabetic'
-//   drawWithBBox('Alphabet alphabetic', 20, 50)
-
-//   drawWithBBox('weruoasnm', 50, 175) // no ascenders/descenders
-
-//   drawWithBBox(',', 100, 125) // tiny height
-
-//   ctx.textBaseline = 'bottom'
-//   drawWithBBox('Alphabet bottom', 20, 90)
-
-//   ctx.textBaseline = 'alphabetic'
-//   ctx.rotate(Math.PI / 8)
-//   drawWithBBox('Alphabet', 50, 100)
-// }
-
 tests['image sampling (#1084)'] = function (ctx, done) {
   let loaded1, loaded2
   const img1 = new Image()
@@ -2770,4 +3172,50 @@ tests['transformed drawimage'] = function (ctx) {
   ctx.fillRect(5, 5, 50, 50)
   ctx.transform(1.2, 1, 1.8, 1.3, 0, 0)
   ctx.drawImage(ctx.canvas, 0, 0)
+}
+
+function drawCanvasTest(ctx, done, asRaster) {
+  if (Canvas) {
+    const srcCtx = new Canvas(10, 10).getContext('2d');
+    srcCtx.font = 'italic 12px Arial'
+    srcCtx.fillText("&", 2, 8);
+    if (asRaster)
+      ctx.drawImage(srcCtx.canvas, 0, 0, ctx.canvas.width, ctx.canvas.height)
+    else
+      ctx.drawCanvas(srcCtx.canvas, 0, 0, ctx.canvas.width, ctx.canvas.height)
+    done(null)
+  }
+  else {
+    if (asRaster) {
+      const srcCtx = Object.assign(document.createElement('canvas'), {width: 10, height: 10, hidden: true})?.getContext('2d')
+      if (!srcCtx)
+        return done(null)
+      srcCtx.font = 'italic 12px Arial'
+      srcCtx.fillText("&", 2, 8)
+      srcCtx.canvas.toBlob((data) => {
+        if (!data)
+          return done(null)
+        const img = document.createElement("img");
+        img.onload = function() {
+          ctx.drawImage(img, 0, 0, ctx.canvas.width, ctx.canvas.height)
+          done(null)
+        }
+        img.src = URL.createObjectURL(data)
+      }, 'image/png', 1.0)
+    }
+    else {
+      // rough approximation
+      ctx.font = 'italic 242px Arial'
+      ctx.fillText("&", 39, 170)
+      done(null)
+    }
+  }
+}
+
+tests['draw Canvas as raster with scale up'] = function (ctx, done) {
+  drawCanvasTest(ctx, done, true)
+}
+
+tests['draw Canvas as vectors with scale up'] = function (ctx, done) {
+  drawCanvasTest(ctx, done, false)
 }

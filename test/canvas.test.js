@@ -12,12 +12,14 @@ const BLACK = [0,0,0,255],
       MAGIC = {
         jpg: Buffer.from([0xFF, 0xD8, 0xFF]),
         png: Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
+        webp: Buffer.from([0x52, 0x49, 0x46, 0x46]),
         pdf: Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2d]),
         svg: Buffer.from(`<?xml version`, 'utf-8')
       },
       MIME = {
         png: "image/png",
         jpg: "image/jpeg",
+        webp: "image/webp",
         pdf: "application/pdf",
         svg: "image/svg+xml"
       };
@@ -183,6 +185,21 @@ describe("Canvas", ()=>{
       }
     })
 
+    test("WEBPs", async ()=>{
+      await Promise.all([
+        canvas.saveAs(`${TMP}/output1.webp`),
+        canvas.saveAs(`${TMP}/output2.WEBP`),
+        canvas.saveAs(`${TMP}/output3`, {format:'webp'}),
+        canvas.saveAs(`${TMP}/output4.svg`, {format:'webp'}),
+      ])
+
+      let magic = MAGIC.webp
+      for (let path of findTmp(`/*`)){
+        let header = fs.readFileSync(path).slice(0, magic.length)
+        expect(header.equals(magic)).toBe(true)
+      }
+    })
+
     test("SVGs", async ()=>{
       await Promise.all([
         canvas.saveAs(`${TMP}/output1.svg`),
@@ -226,7 +243,7 @@ describe("Canvas", ()=>{
 
       await canvas.saveAs(`${TMP}/output-{2}.png`)
 
-      let files = findTmp(`/output-0?.png`)
+      let files = findTmp(`/output-0?.png`).sort()
       expect(files.length).toEqual(colors.length+1)
 
       files.forEach((fn, i) => {
@@ -310,7 +327,7 @@ describe("Canvas", ()=>{
       let width = 0, height = 128
       Object.assign(canvas, {width, height})
       expect(canvas).toMatchObject({width, height})
-      await expect(canvas.saveAs(`${TMP}/zeroed.png`)).rejects.toThrowError("must be non-empty")
+      await expect(canvas.saveAs(`${TMP}/zeroed.png`)).rejects.toThrowError("must not be empty")
     })
   })
 
@@ -347,6 +364,21 @@ describe("Canvas", ()=>{
       canvas.saveAsSync(`${TMP}/output4.svg`, {format:'png'})
 
       let magic = MAGIC.png
+      for (let path of findTmp(`/*`)){
+        let header = fs.readFileSync(path).slice(0, magic.length)
+        expect(header.equals(magic)).toBe(true)
+      }
+    })
+
+    test("WEBPs", async ()=>{
+      await Promise.all([
+        canvas.saveAsSync(`${TMP}/output1.webp`),
+        canvas.saveAsSync(`${TMP}/output2.WEBP`),
+        canvas.saveAsSync(`${TMP}/output3`, {format:'webp'}),
+        canvas.saveAsSync(`${TMP}/output4.svg`, {format:'webp'}),
+      ])
+
+      let magic = MAGIC.webp
       for (let path of findTmp(`/*`)){
         let header = fs.readFileSync(path).slice(0, magic.length)
         expect(header.equals(magic)).toBe(true)
@@ -392,7 +424,7 @@ describe("Canvas", ()=>{
 
       canvas.saveAsSync(`${TMP}/output-{2}.png`)
 
-      let files = findTmp(`/output-0?.png`)
+      let files = findTmp(`/output-0?.png`).sort()
       expect(files.length).toEqual(colors.length+1)
 
       files.forEach((fn, i) => {
@@ -475,7 +507,7 @@ describe("Canvas", ()=>{
       let width = 0, height = 128
       Object.assign(canvas, {width, height})
       expect(canvas).toMatchObject({width, height})
-      expect( () => canvas.saveAsSync(`${TMP}/zeroed.png`)).toThrowError("must be non-empty")
+      expect( () => canvas.saveAsSync(`${TMP}/zeroed.png`)).toThrowError("must not be empty")
     })
   })
 

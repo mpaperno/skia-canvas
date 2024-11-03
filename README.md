@@ -24,7 +24,7 @@ In particular, Skia Canvas:
     - multi-line, [word-wrapped](#textwrap) text
     - line-by-line [text metrics](#measuretextstr-width)
     - small-caps, ligatures, and other opentype features accessible using standard [font-variant](#fontvariant) syntax
-    - proportional letter-spacing (a.k.a. [‘tracking’](#texttracking)) and leading
+    - proportional [letter-spacing][letterSpacing], [word-spacing][wordSpacing], and [leading](#font)
     - support for [variable fonts][VariableFonts] and transparent mapping of weight values
     - use of non-system fonts [loaded](#usefamilyname-fontpaths) from local files
 
@@ -186,8 +186,8 @@ The library exports a number of classes emulating familiar browser objects inclu
  - [CanvasPattern][CanvasPattern]
  - [CanvasRenderingContext2D][CanvasRenderingContext2D] ⧸[⚡](#canvasrenderingcontext2d)
  - [DOMMatrix][DOMMatrix]
- - [Image][Image]
- - [ImageData][ImageData] /[⚡][ImageData_ext]
+ - [Image][mdn_Image] /[⚡](#image)
+ - [ImageData][mdn_ImageData] /[⚡][ImageData_ext]
  - [Path2D][Path2D] ⧸[⚡](#path2d)
 
 In addition, the module contains:
@@ -206,7 +206,7 @@ The Canvas object is a stand-in for the HTML `<canvas>` element. It defines imag
 | Image Dimensions             | Rendering Contexts            | Output                                           |
 | --                           | --                            | --                                               |
 | [**width**][canvas_width]    | [**gpu**][canvas_gpu] ⚡      | ~~[**async**][canvas_async]~~  ⚡                    |
-| [**height**][canvas_height]  | [**pages**][canvas_pages] ⚡  | [**pdf**, **png**, **svg**, **jpg**, **raw**][shorthands] ⚡ |
+| [**height**][canvas_height]  | [**pages**][canvas_pages] ⚡  | [**pdf**, **png**, **svg**, **jpg**, **webp**, **raw**][shorthands] ⚡ |
 | [**size**][canvas_size]      | [getContext()][getContext]    | [saveAs()][saveAs] / [saveAsSync()][saveAs] ⚡                            |
 |                              | [newPage()][newPage] ⚡       | [toBuffer()][toBuffer] / [toBufferSync()][toBuffer] ⚡                        |
 |                              |                               | [toDataURL()][toDataURL_ext] / [toDataURLSync()][toDataURL_ext] ⚡ |
@@ -246,7 +246,7 @@ When the canvas renders images and writes them to disk, it does so in a backgrou
   - [`toDataURL()`][toDataURL_ext]
   - [`toRaw()`][toRaw]
   - [`toImageData()`][toImageData]
-  - [`.pdf`, `.svg`, `.jpg`, `.png`, `raw`][shorthands]
+  - [`.pdf`, `.svg`, `.jpg`, `.png`, `.webp`, `raw`][shorthands]
 
 
 In cases where this is not the desired behavior, you can use the synchronous equivalents for the primary export functions. They accept identical arguments to their async versions but block execution and return their values synchronously rather than wrapped in Promises. Also note that the [shorthand properties][shorthands] do not have synchronous versions:
@@ -290,7 +290,7 @@ Shorthand for the standard `width` and `height` properties (readable and settabl
 { width: number, height: number }
 ```
 
-#### `.pdf`, `.svg`, `.jpg`, `.png`, and `raw`
+#### `.pdf`, `.svg`, `.jpg`, `.png`, `.webp`, and `raw`
 
 These properties are syntactic sugar for calling the `toBuffer()` method. Each returns a [Promise][Promise] that resolves to a Node [`Buffer`][Buffer] object with the contents of the canvas in the given format. If more than one page has been added to the canvas, only the most recent one will be included unless you’ve accessed the `.pdf` property in which case the buffer will contain a multi-page PDF.
 
@@ -372,18 +372,19 @@ Same as `.toRaw()` with the result wrapped in an [ImageData][ImageData_ext] type
 
 Most of your interaction with the canvas will actually be directed toward its ‘rendering context’, a supporting object you can acquire by calling the canvas’s [getContext()](https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/getContext) and [newPage()][newPage] methods.
 
-| Canvas State                                  | Drawing                                           | Pattern & Color                                   | Line Style                                   | Transform                                        | Bezier Paths                             | Typography                                                       | Images                                             | Compositing Effects                                      |
-|-----------------------------------------------|---------------------------------------------------|---------------------------------------------------|----------------------------------------------|--------------------------------------------------|------------------------------------------|------------------------------------------------------------------|----------------------------------------------------|----------------------------------------------------------|
-| [**canvas**][canvas_attr] ⧸[⚡](#canvas) | [clearRect()][clearRect()]                        | [**fillStyle**][fillStyle]                        | [**lineCap**][lineCap]                       | [**currentTransform**][currentTransform]         | [moveTo()][moveTo()]                     | [**direction**][direction]                                       | [**imageSmoothingEnabled**][imageSmoothingEnabled] | [**filter**][filter]                                     |
-| [beginPath()][beginPath()]                    | [fillRect()][fillRect()]                          | [**strokeStyle**][strokeStyle]                    | [**lineDashFit** ⚡][lineDashFit]       | [createProjection() ⚡][createProjection()] | [lineTo()][lineTo()]                     | [**font**][font] ⧸[⚡](#font)                               | [**imageSmoothingQuality**][imageSmoothingQuality] | [**globalAlpha**][globalAlpha]                           |
-| [closePath()][closePath()]                    | [strokeRect()][strokeRect()]                      | [createConicGradient()][createConicGradient()]    | [**lineDashMarker** ⚡][lineDashMarker] | [getTransform()][getTransform()]                 | [arcTo()][arcTo()]                       | [**fontVariant** ⚡](#fontvariant)                          | [createImageData()][createImageData()]             | [**globalCompositeOperation**][globalCompositeOperation] |
-| [isPointInPath()][isPointInPath()]            | [fillText()][fillText()] ⧸[⚡][drawText]     | [createLinearGradient()][createLinearGradient()]  | [**lineDashOffset**][lineDashOffset]         | [setTransform()][setTransform()]                 | [bezierCurveTo()][bezierCurveTo()]       | [**textAlign**][textAlign]                                       | [getImageData()][getImageData()]                   | [**shadowBlur**][shadowBlur]                             |
-| [isPointInStroke()][isPointInStroke()]        | [strokeText()][strokeText()] ⧸[⚡][drawText] | [createRadialGradient()][createRadialGradient()]  | [**lineJoin**][lineJoin]                     | [resetTransform()][resetTransform()]             | [conicCurveTo() ⚡][conicCurveTo]   | [**textBaseline**][textBaseline]                                 | [putImageData()][putImageData()]                   | [**shadowColor**][shadowColor]                           |
-| [save()][save()]                              | [fill()][fill()]                                  | [createPattern()][createPattern()]                | [**lineWidth**][lineWidth]                   | [transform()][transform()] ⧸[⚡][transform]                      | [quadraticCurveTo()][quadraticCurveTo()] | [**textTracking** ⚡](#texttracking)                        | [drawCanvas() ⚡](#drawcanvascanvas-x-y-)     | [**shadowOffsetX**][shadowOffsetX]                       |
-| [restore()][restore()]                        | [stroke()][stroke()]                              | [createTexture() ⚡][createTexture()]        | [**miterLimit**][miterLimit]                 | [translate()][translate()]                       | [arc()][arc()]                           | [**textWrap** ⚡](#textwrap)                                | [drawImage()][drawImage()]                         | [**shadowOffsetY**][shadowOffsetY]                       |
-| [reset()][reset()]                            |                                                   |                                                   | [getLineDash()][getLineDash()]               | [rotate()][rotate()]                             | [ellipse()][ellipse()]                   | [measureText()][measureText()] ⧸[⚡](#measuretextstr-width) |                                                    |                                                          |
-| [clip()][clip()]                              |                                                   |                                                   | [setLineDash()][setLineDash()]               | [scale()][scale()]                               | [rect()][rect()]                         | [outlineText() ⚡][outlineText()]                           |                                                    |                                                          |
-|                                               |                                                   |                                                   |                                              |                                                  | [roundRect()][roundRect()]               |                                                                  |                                                    |
+| Canvas State                                  | Drawing                                     | Pattern & Color                                   | Line Style                             | Transform                                        | Bezier Paths                             | Typography                                                 | Images                                             | Compositing Effects                                      |
+|-----------------------------------------------|---------------------------------------------|---------------------------------------------------|----------------------------------------|--------------------------------------------------|------------------------------------------|------------------------------------------------------------|----------------------------------------------------|----------------------------------------------------------|
+| [**canvas**][canvas_attr] ⧸[⚡](#canvas)       | [clearRect()][clearRect()]                  | [**fillStyle**][fillStyle]                        | [**lineCap**][lineCap]                 | [**currentTransform**][currentTransform]         | [moveTo()][moveTo()]                     | [**direction**][direction]                                 | [**imageSmoothingEnabled**][imageSmoothingEnabled] | [**filter**][filter]                                     |
+| [beginPath()][beginPath()]                    | [fillRect()][fillRect()]                    | [**strokeStyle**][strokeStyle]                    | [**lineDashFit** ⚡][lineDashFit]       | [createProjection() ⚡][createProjection()]       | [lineTo()][lineTo()]                     | [**font**][font] ⧸[⚡](#font)                               | [**imageSmoothingQuality**][imageSmoothingQuality] | [**globalAlpha**][globalAlpha]                           |
+| [closePath()][closePath()]                    | [strokeRect()][strokeRect()]                | [createConicGradient()][createConicGradient()]    | [**lineDashMarker** ⚡][lineDashMarker] | [getTransform()][getTransform()]                 | [arcTo()][arcTo()]                       | [**fontVariant** ⚡](#fontvariant)                          | [createImageData()][createImageData()]             | [**globalCompositeOperation**][globalCompositeOperation] |
+| [isPointInPath()][isPointInPath()]            | [fillText()][fillText()] ⧸[⚡][drawText]     | [createLinearGradient()][createLinearGradient()]  | [**lineDashOffset**][lineDashOffset]   | [setTransform()][setTransform()]                 | [bezierCurveTo()][bezierCurveTo()]       | [**fontStretch**][fontStretch]                             | [getImageData()][getImageData()]                   | [**shadowBlur**][shadowBlur]                             |
+| [isPointInStroke()][isPointInStroke()]        | [strokeText()][strokeText()] ⧸[⚡][drawText] | [createRadialGradient()][createRadialGradient()]  | [**lineJoin**][lineJoin]               | [resetTransform()][resetTransform()]             | [conicCurveTo() ⚡][conicCurveTo]        | [**letterSpacing**][letterSpacing]                          | [putImageData()][putImageData()]                   | [**shadowColor**][shadowColor]                           |
+| [save()][save()]                              | [fill()][fill()]                            | [createPattern()][createPattern()]                | [**lineWidth**][lineWidth]             | [transform()][transform()] ⧸[⚡][transform ]      | [quadraticCurveTo()][quadraticCurveTo() | [**wordSpacing**][wordSpacing]                              | [drawCanvas() ⚡](#drawcanvascanvas-x-y-)           | [**shadowOffsetX**][shadowOffsetX]                       |
+| [restore()][restore()]                        | [stroke()][stroke()]                        | [createTexture() ⚡][createTexture()]              | [**miterLimit**][miterLimit]           | [translate()][translate()]                       | [arc()][arc()]                          | [**textAlign**][textAlign]                                  | [drawImage()][drawImage()]                         | [**shadowOffsetY**][shadowOffsetY]                       |
+| [reset()][reset()]                            |                                             |                                                   | [getLineDash()][getLineDash()]         | [rotate()][rotate()]                             | [ellipse()][ellipse()]                  | [**textBaseline**][textBaseline]                            |                                                    |                                                          |
+| [clip()][clip()]                              |                                             |                                                   | [setLineDash()][setLineDash()]         | [scale()][scale()]                               | [rect()][rect()]                        | [**textWrap** ⚡](#textwrap)                                 |                                                    |                                                          |
+|                                               |                                             |                                                   |                                        |                                                  | [roundRect()][roundRect()]              | [measureText()][measureText()] ⧸[⚡](#measuretextstr-width)  |                                                    |                                                          |
+|                                               |                                             |                                                   |                                        |                                                  |                                         | [outlineText() ⚡][outlineText()]                            |                                                    |                                                          |
 
 ##### PROPERTIES
 
@@ -605,11 +606,11 @@ The `baseline` value is a y-axis offset from the text origin to that particular 
 
 The `startIndex` and `endIndex` values are the indices into the string of the first and last character that were typeset on that line.
 
-#### `outlineText(str)`
+#### `outlineText(str, [width])`
 
-The `outlineText()` method typesets a string and returns a Path2D containing the shapes of its character glyphs. It will use the context’s current [`.font`][font], [`.textAlign`][textAlign], and [`.textBaseline`][textBaseline] settings to style the string and will anchor the text relative to the (0, 0) origin point. As a result, you’ll typically want to use the context’s transform-related methods or Path2D’s [`offset()`][p2d_offset] and [`transform()`][p2d_transform] to position the path before drawing it to the canvas.
+The `outlineText()` method typesets a string and returns a Path2D containing the shapes of its character glyphs. It will use the context’s current typography settings (e.g., [`.font`][font], [`.textWrap`](#textWrap), [`.textAlign`][textAlign] [`.textBaseline`][textBaseline], etc.) to style the string and will anchor the text relative to the (0, 0) origin point. As a result, you’ll typically want to use the context’s transform-related methods or Path2D’s [`offset()`][p2d_offset] and [`transform()`][p2d_transform] to position the path before drawing it to the canvas.
 
-Note that path-generation uses a more limited typesetting system than [`fillText()`][drawText] and [`strokeText()`][drawText]. As such, it ignores any settings made using the [`.fontVariant`](#fontvariant) or [`.textTracking`](#texttracking) properties and does not support multi-line text (regardless of the current [`.textWrap`](#textwrap) setting).
+As with the [`fillText()`][drawText] and [`strokeText()`][drawText] methods, `outlineText()` will produce a single line of text unless `.textWrap` is enabled and will use the optional `width` argument to determine the maximum line width. If a `width` is specified but `.textWrap` is *not* enabled, any text that doesn't fit within that measure will be omitted from the path.
 
 ```js
 ctx.textBaseline = 'top'
@@ -659,9 +660,9 @@ You can then use these objects by passing them as the first argument to the cont
 
 #### Ellipse drawing option
 
-By default drawing complete circles with `ellipse()` and `arc()` methods stops at 360 degrees even if the specfied arc was larger. For example drawing a circle from 0 to 450 degrees clockwise would end the path at 360 degrees. If you continue the path to another point/etc, it may not start where you expect. This appears to be default browser behaviour, however.
+By default drawing complete circles with `ellipse()` and `arc()` methods stops at 360 degrees even if the specified arc was larger. For example drawing a circle from 0 to 450 degrees clockwise would end the path at 360 degrees. If you continue the path to another point/etc, it may not start where you expect. This appears to be default browser behavior, however.
 
-This version introduces an environment varaiable to control this behavor: `SKIA_CANVAS_DRAW_ELLIPSE_PAST_FULL_CIRCLE`
+This version introduces an environment variable to control this behavior: `SKIA_CANVAS_DRAW_ELLIPSE_PAST_FULL_CIRCLE`
 
 Set the variable to "1" (w/out quotes) to allow `ellipse()` and `arc()` drawing actions to continue past a complete 360 degree circle if so directed.
 This is a global setting affecting both the `CanvasRenderingContext2D` and `Path2D` versions of `arc()` and `ellipse()`. It must be set **before** any calls to these functions are made, any changes after that are ignored.
@@ -701,7 +702,7 @@ for (const [verb, ...pts] of original.edges){
 }
 ```
 
-The array is not a verbtaim transcript of the drawing commands that have been called since some commands (e.g., `arc()`) will be converted into an equivalent sequence of bézier curves. The full range of verbs and numbers of point arguments is as follows:
+The array is not a verbatim transcript of the drawing commands that have been called since some commands (e.g., `arc()`) will be converted into an equivalent sequence of bézier curves. The full range of verbs and numbers of point arguments is as follows:
 
 ```js
 [
@@ -875,9 +876,143 @@ let unwound = orig.unwind()
 ![convert winding rule subpaths](/test/assets/path/effect-unwind@2x.png)
 
 
+## Image
+
+The included `Image` class is analogous to the one in [browsers][mdn_Image], except that it doesn't have any HTMLElement attributes.
+It supports the following features (see MDN [Image][mdn_Image] for details):
+
+##### CONSTRUCTOR
+In addition to the standard optional `width`/`height` arguments, `Image` can also be constructed with an options object instead.
+```ts
+export class Image {
+  constructor(width?: number, height?: number)
+  constructor(options: ImageOptions)
+}
+
+interface ImageOptions {
+  /** Image width */
+  width?: number
+  /** Image height */
+  height?: number
+  /** Signals to the parser that source is in SVG format.
+    Used when loading image source data from a Buffer. */
+  type?: 'svg' | undefined
+  /** Describes how to process raw image buffer with decoded pixels */
+  raw?: ImageInfo | undefined
+}
+```
+(For further details on the `raw` options see ["Loading decoded pixel buffers"](#loading-decoded-pixel-buffers) and [ImageData][ImageData_ext], below.)
+
+##### PROPERTIES
+- `width`, `height`, `naturalWidth`, `naturalHeight`, `src`, `complete`
+
+In addition to HTTP[s] URLs, the `src` attribute will also accept [data URLs][DataURL], local file paths, and [Buffer][Buffer] objects.
+
+##### METHODS
+```ts
+  decode(): Promise<Image>
+```
+
+##### EVENTS
+There are 2 events, similar to standard ones except they pass on different arguments (not `Event`s)"
+```ts
+  onload: (this: Image, image: Image) => any
+  onerror: (this: Image, error: Error) => any
+```
+**Note** that `Image` is *not* an `EventTarget` and therefore **does not support** `addEventListener()` and related methods.
+
+### Loading decoded pixel buffers
+Both `Image` and `loadImage()` supports loading raw decoded pixel buffers. In this case API consumer needs to provide a `Buffer` with pixel data and needs to know image resolution and color type beforehand.
+A special `ImageInfo` structure must be included in the `Image` constructor's `ImageOptions.raw` property.
+
+```ts
+interface ImageInfo {
+  /** Source image width (data columns). Required. */
+  width: number
+  /** Source image height (data rows). Required. */
+  height: number
+  /** Color type of pixel. Default is 'rgba'. */
+  colorType?: ColorType,
+  /** Whether image color data is premultiplied with alpha value. Default is `false`. */
+  premultiplied?: boolean,
+}
+```
+
+Here are some examples:
+```js
+let img = new Image({
+  raw: {
+    width: 1920,
+    height: 1080,
+    colorType: 'argb',
+    premultiplied: true
+  }
+})
+img.src = pixelBuffer
+ctx.drawImage(img, 100, 100)
+```
+
+With [loadImage()](#loadimage)
+```js
+let img = await loadImage(pixelBuffer, {
+  raw: {
+    width: 1920,
+    height: 1080,
+  }
+})
+ctx.drawImage(img, 100, 100)
+```
+
+See the [colorType](#colortype) export option for a list of `colorType` values (default is '**rgba**').
+
+The `premultiplied` option specifies if the pixel color data has already been pre-multiplied with the alpha value so that recalculation can be skipped.  Default is `false`.
+
+### loadImage()
+
+The `loadImage()` utility method wraps image loading in a [Promise][Promise], allowing for more concise initialization.
+```ts
+function loadImage(src: string | Buffer, options?: ImageOptions): Promise<Image>
+```
+
+For instance the following snippets are equivalent:
+
+```js
+let img = new Image()
+img.onload = function(){
+  ctx.drawImage(img, 100, 100)
+}
+img.src = 'https://example.com/icon.png'
+```
+
+```js
+let img = new Image()
+img.src = 'https://example.com/icon.png'
+await img.decode()
+ctx.drawImage(img, 100, 100)
+```
+
+```js
+let img = await loadImage('https://example.com/icon.png')
+ctx.drawImage(img, 100, 100)
+```
+
+Using a [pixel buffer](#loading-decoded-pixel-buffers)
+```js
+let img = await loadImage(pixelBuffer, {
+  raw: {
+    width: 1920,
+    height: 1080,
+  }
+})
+ctx.drawImage(img, 100, 100)
+```
+
+As with `Image.src`,  HTTP URLs, [data URLs][DataURL], local file paths, and [Buffer][Buffer] objects can all be used as an image source.
+
+
 ## ImageData
 
-The custom `ImageData` class extends the [standard one][ImageData] with the following constructor options and read-only properties.
+The custom `ImageData` class extends the [standard one][mdn_ImageData] with the following constructor options and read-only properties.
 
 NOTE: The standard `colorSpace` setting/property is currently ignored. No color space conversion is supported.
 
@@ -1032,7 +1167,7 @@ win.on('keydown', e => {
 
 Once you've created a `Window` object, Node will wait for your current function to end and then switch over to an OS-controlled event loop for the rest of your program’s runtime. This means it can actively redraw your canvas when you resize the window or update its contents, but also means the Node interpreter will be frozen for the duration.
 
-As a result, you cannot rely upon Node's traditional asynchrononous behavior for structuring your program. In particular, the usual methods for scheduling callbacks like `setTimeout`, `setImmediate`, and `setInterval` **will not work**.
+As a result, you cannot rely upon Node's traditional asynchronous behavior for structuring your program. In particular, the usual methods for scheduling callbacks like `setTimeout`, `setImmediate`, and `setInterval` **will not work**.
 
 Instead, you must use event handlers attached to the `Window` object. By calling the window’s `.on()`, `.off()`, and `.once()` methods, you can respond to [user interface events][win_bind] like mouse and keyboard input, the window being dragged or resized, a new window becoming active, etc.
 
@@ -1092,7 +1227,7 @@ But another common case is creating animations in which you redraw the canvas at
   - [`draw`][draw] fires immediately after `frame` and **clears the canvas** of any window that has event handlers for it
 
 
-To create a ‘flipbook’ animation (in which the screen is fully redrawn in each pass), your best choice is set up an event handler for the `draw` event. Since `draw` automatically erases the canvas before your code begins to run, you can presume a clean slate each time. The event object passed as an argument to your handler contains a propery called `frame` which will increment by one each time you draw (making it handy for advancing the ‘state’ of your animation):
+To create a ‘flipbook’ animation (in which the screen is fully redrawn in each pass), your best choice is set up an event handler for the `draw` event. Since `draw` automatically erases the canvas before your code begins to run, you can presume a clean slate each time. The event object passed as an argument to your handler contains a property called `frame` which will increment by one each time you draw (making it handy for advancing the ‘state’ of your animation):
 
 ```js
 let win = new Window(300, 300, {background:'red'}),
@@ -1221,67 +1356,12 @@ An array of references to all of the `Window` objects that have been created and
 
 #### `launch()`
 Any `Window` you create will schedule the `App` to begin running as soon as the current function returns. You can make this happen sooner by calling `App.launch` within your code. The `launch()` method will not return until the last window is closed so you may find it handy to place ‘clean up’ code after the `launch()` invocation.
->Note, however, that the `App` **cannot be launched a second time** once it terminates due to limitiations in the underlying platform libraries.
+>Note, however, that the `App` **cannot be launched a second time** once it terminates due to limitations in the underlying platform libraries.
 
 #### `quit()`
 By default your process will terminate once the final window has closed. If you wish to bring things to a swifter conclusion from code, call the `App.quit()` method from one of your event handlers instead.
 
 ## Utilities
-
-### loadImage()
-
-The included [Image][Image] object behaves just like the one in browsers, which is to say that loading images can be verbose, fiddly, and callback-heavy. The `loadImage()` utility method wraps image loading in a [Promise][Promise], allowing for more concise initialization. For instance the following snippets are equivalent:
-
-```js
-let img = new Image()
-img.onload = function(){
-  ctx.drawImage(img, 100, 100)
-}
-img.src = 'https://example.com/icon.png'
-```
-
-```js
-let img = new Image()
-img.src = 'https://example.com/icon.png'
-await img.decode()
-ctx.drawImage(img, 100, 100)
-```
-
-```js
-let img = await loadImage('https://example.com/icon.png')
-ctx.drawImage(img, 100, 100)
-```
-
-In addition to HTTP URLs, both `loadImage()` and the `Image.src` attribute will also accept [data URLs][DataURL], local file paths, and [Buffer][Buffer] objects.
-
-#### Loading decoded pixel buffers
-Both `Image` and `loadImage()` supports loading raw decoded pixel buffers. In this case API consumer needs to provide a `Buffer` with pixel data and needs to know image resolution and color type beforehand.
-
-```js
-let img = await loadImage(pixelBuffer, {
-  raw: {
-    width: 1920,
-    height: 1080,
-  }
-})
-ctx.drawImage(img, 100, 100)
-```
-```js
-let img = new Image({
-  raw: {
-    width: 1920,
-    height: 1080,
-    colorType: 'rbga',
-    premultiplied: true
-  }
-})
-img.src = pixelBuffer
-ctx.drawImage(img, 100, 100)
-```
-
-See the [colorType](#colortype) export option for a list of `colorType` values (default is '**rgba**').
-
-The `premultiplied` option specifies if the pixel color data has already been pre-multiplied with the alpha value so that recalculation can be skipped.  Default is `false`.
 
 ### FontLibrary
 
@@ -1414,8 +1494,8 @@ Many thanks to the [`node-canvas`](https://github.com/Automattic/node-canvas) de
 [CanvasPattern]: https://developer.mozilla.org/en-US/docs/Web/API/CanvasPattern
 [CanvasRenderingContext2D]: https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D
 [DOMMatrix]: https://developer.mozilla.org/en-US/docs/Web/API/DOMMatrix
-[Image]: https://developer.mozilla.org/en-US/docs/Web/API/Image
-[ImageData]: https://developer.mozilla.org/en-US/docs/Web/API/ImageData
+[mdn_Image]: https://developer.mozilla.org/en-US/docs/Web/API/Image
+[mdn_ImageData]: https://developer.mozilla.org/en-US/docs/Web/API/ImageData
 [Path2D]: https://developer.mozilla.org/en-US/docs/Web/API/Path2D
 [lineHeight]: https://developer.mozilla.org/en-US/docs/Web/CSS/line-height
 [font-variant]: https://developer.mozilla.org/en-US/docs/Web/CSS/font-variant
@@ -1426,6 +1506,7 @@ Many thanks to the [`node-canvas`](https://github.com/Automattic/node-canvas) de
 [fillStyle]: https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/fillStyle
 [filter]: https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/filter
 [font]: https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/font
+[fontStretch]: https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/fontStretch
 [globalAlpha]: https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/globalAlpha
 [globalCompositeOperation]: https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/globalCompositeOperation
 [imageSmoothingEnabled]: https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/imageSmoothingEnabled
@@ -1442,6 +1523,8 @@ Many thanks to the [`node-canvas`](https://github.com/Automattic/node-canvas) de
 [strokeStyle]: https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/strokeStyle
 [textAlign]: https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/textAlign
 [textBaseline]: https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/textBaseline
+[letterSpacing]: https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/letterSpacing
+[wordSpacing]: https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/wordSpacing
 [arc()]: https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/arc
 [arcTo()]: https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/arcTo
 [beginPath()]: https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/beginPath

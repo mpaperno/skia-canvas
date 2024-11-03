@@ -2,8 +2,8 @@
 
 const _ = require('lodash'),
       fs = require('fs'),
-      glob = require('glob').sync,
-      {Image, FontLibrary, loadImage} = require('../lib'),
+      path = require('path'),
+      {Canvas, Image, FontLibrary, loadImage} = require('../lib'),
       simple = require('simple-get')
 
 jest.mock('simple-get', () => {
@@ -27,15 +27,19 @@ describe("Image", () => {
       URL = `https://${PATH}`,
       BUFFER = fs.readFileSync(PATH),
       DATA_URI = `data:image/png;base64,${BUFFER.toString('base64')}`,
-      FRESH = {complete:false, width:undefined, height:undefined},
-      LOADED = {complete:true, width:125, height:125},
+      FRESH = {complete:false, width:0, height:0, naturalWidth:0, naturalHeight:0},
+      LOADED = {complete:true, width:125, height:125, naturalWidth:125, naturalHeight:125},
       FORMAT = 'test/assets/image/format',
-      PARSED = {complete:true, width:60, height:60},
+      PARSED = {complete:true, width:60, height:60, naturalWidth:60, naturalHeight:60},
+      SVG_PATH = `${FORMAT}.svg`,
+      SVG_URL = `https://${SVG_PATH}`,
+      SVG_BUFFER = fs.readFileSync(SVG_PATH),
+      SVG_DATA_URI = `data:image/svg;base64,${SVG_BUFFER.toString('base64')}`,
       img
 
   beforeEach(() => img = new Image() )
 
-  describe("can be initialized from", () => {
+  describe("can initialize bitmaps from", () => {
     test("buffer", () => {
       expect(img).toMatchObject(FRESH)
       img.src = BUFFER
@@ -93,6 +97,9 @@ describe("Image", () => {
       img = await loadImage(PATH)
       expect(img).toMatchObject(LOADED)
 
+      img = await loadImage(SVG_PATH)
+      expect(img).toMatchObject(PARSED)
+
       img = await loadImage(PATH.replace('.png', '.raw'), {
         raw: {
           width: 125,
@@ -103,6 +110,37 @@ describe("Image", () => {
       expect(img).toMatchObject(LOADED)
 
       expect(async () => { await loadImage('http://nonesuch') }).rejects.toEqual("HTTP_ERROR_404")
+    })
+  })
+
+  describe("can initialize SVGs from", () => {
+    test("buffer", () => {
+      const svgImage = new Image({ type: 'svg' })
+      expect(svgImage).toMatchObject(FRESH)
+      svgImage.src = SVG_BUFFER
+      expect(svgImage).toMatchObject(PARSED)
+    })
+
+    test("data uri", () => {
+      expect(img).toMatchObject(FRESH)
+      img.src = SVG_DATA_URI
+      expect(img).toMatchObject(PARSED)
+    })
+
+    test("local file", () => {
+      expect(img).toMatchObject(FRESH)
+      img.src = SVG_PATH
+      expect(img).toMatchObject(PARSED)
+    })
+
+    test("http url", done => {
+      expect(img).toMatchObject(FRESH)
+      img.onload = loaded => {
+        expect(loaded).toBe(img)
+        expect(img).toMatchObject(PARSED)
+        done()
+      }
+      img.src = SVG_URL
     })
   })
 
@@ -182,36 +220,129 @@ describe("Image", () => {
   })
 
   describe("can decode format", () => {
+    const asDataURI = path => {
+      let ext = path.split('.').at(-1),
+          mime = `image/${ext.replace('jpg', 'jpeg')}`,
+          content = fs.readFileSync(path).toString('base64')
+      return `data:${mime};base64,${content}`
+    }
+
     test("PNG", () => {
       img.src = FORMAT + '.png'
+      expect(img).toMatchObject(PARSED)
+
+      img.src = asDataURI(img.src)
       expect(img).toMatchObject(PARSED)
     })
 
     test("JPEG", () => {
       img.src = FORMAT + '.jpg'
       expect(img).toMatchObject(PARSED)
+
+      img.src = asDataURI(img.src)
+      expect(img).toMatchObject(PARSED)
     })
 
     test("GIF", () => {
       img.src = FORMAT + '.gif'
+      expect(img).toMatchObject(PARSED)
+
+      img.src = asDataURI(img.src)
       expect(img).toMatchObject(PARSED)
     })
 
     test("BMP", () => {
       img.src = FORMAT + '.bmp'
       expect(img).toMatchObject(PARSED)
+
+      img.src = asDataURI(img.src)
+      expect(img).toMatchObject(PARSED)
     })
 
     test("ICO", () => {
       img.src = FORMAT + '.ico'
       expect(img).toMatchObject(PARSED)
+
+      img.src = asDataURI(img.src)
+      expect(img).toMatchObject(PARSED)
+    })
+
+    test("WEBP", () => {
+      img.src = FORMAT + '.webp'
+      expect(img).toMatchObject(PARSED)
+
+      img.src = asDataURI(img.src)
+      expect(img).toMatchObject(PARSED)
+    })
+
+    test("SVG", () => {
+      img.src = FORMAT + '.svg'
+      expect(img).toMatchObject(PARSED)
+    })
+  })
+
+  describe("size can be", () => {
+    const sizeBefore = (width, height) => ({width, height, complete:false, naturalWidth:0, naturalHeight:0})
+    const sizeAfter = (width, height) => ({width, height, complete:true, naturalWidth:125, naturalHeight:125})
+    const compareSizes = (img, before, after) => {
+      expect(img).toMatchObject(before)
+      img.src = DATA_URI
+      expect(img).toMatchObject(after)
+    }
+
+    test("different from natural size", () => {
+      img = new Image(50, 50)
+      compareSizes(img, sizeBefore(50, 50), sizeAfter(50, 50))
+    })
+
+    test("set with just width or just height", () => {
+      // no custom size
+      img = new Image()
+      compareSizes(img, sizeBefore(0,0), sizeAfter(125, 125))
+
+      // just width
+      img = new Image(50)
+      compareSizes(img, sizeBefore(50, 0), sizeAfter(50, 125))
+
+      // just height
+      img = new Image(undefined, 50)
+      compareSizes(img, sizeBefore(0, 50), sizeAfter(125, 50))
+    })
+
+    test("set to NaN without error", () => {
+      img = new Image(NaN, NaN)
+      compareSizes(img, sizeBefore(0, 0), sizeAfter(0, 0))
+    })
+
+    test("set to non-numbers without error", () => {
+      // @ts-ignore
+      img = new Image(25, 'frobozz')
+      compareSizes(img, sizeBefore(25, 0), sizeAfter(25, 0))
+
+      // @ts-ignore
+      img = new Image({}, 25)
+      compareSizes(img, sizeBefore(0, 25), sizeAfter(0, 25))
+    })
+
+    test("set to non-positive/integer values", () => {
+      img = new Image(-1, 22.4)
+      compareSizes(img, sizeBefore(0, 22), sizeAfter(0, 22))
     })
   })
 })
 
 
 describe("FontLibrary", ()=>{
-  const findFont = font => `${__dirname}/assets/${font}`
+  let canvas, ctx
+  const findFont = font => path.join(__dirname, 'assets', font),
+      pixel = (x, y) => Array.from(ctx.getImageData(x, y, 1, 1).data),
+      WIDTH = 512, HEIGHT = 512
+
+  
+  beforeEach(() => {
+    canvas = new Canvas(WIDTH, HEIGHT)
+    ctx = canvas.getContext("2d")
+  })
 
   test("can list families", ()=>{
     let fams = FontLibrary.families,
@@ -235,13 +366,14 @@ describe("FontLibrary", ()=>{
 
     if (fam){
       let info = FontLibrary.family(fam)
+      expect(info).toBeTruthy()
       expect(info).toHaveProperty('family')
       expect(info).toHaveProperty('weights')
-      expect(typeof info.weights[0]).toBe('number');
+      expect(info && typeof info.weights[0]).toBe('number');
       expect(info).toHaveProperty('widths')
-      expect(typeof info.widths[0]).toBe('string');
+      expect(info && typeof info.widths[0]).toBe('string');
       expect(info).toHaveProperty('styles')
-      expect(typeof info.styles[0]).toBe('string');
+      expect(info && typeof info.styles[0]).toBe('string');
     }
   })
 
@@ -250,16 +382,39 @@ describe("FontLibrary", ()=>{
         name = "AmstelvarAlpha",
         alias = "PseudonymousBosch";
 
+    // with real name
     expect(() => FontLibrary.use(ttf)).not.toThrow()
     expect(FontLibrary.has(name)).toBe(true)
-    expect(FontLibrary.family(name).weights).toContain(400)
+    expect(_.get(FontLibrary.family(name), "weights")).toContain(400)
 
+    // with alias
     expect(() => FontLibrary.use(alias, ttf)).not.toThrow()
     expect(FontLibrary.has(alias)).toBe(true)
-    expect(FontLibrary.family(alias).weights).toContain(400)
+    expect(_.get(FontLibrary.family(alias), "weights")).toContain(400)
 
+    // fonts disappear after reset
     FontLibrary.reset()
     expect(FontLibrary.has(name)).toBe(false)
     expect(FontLibrary.has(alias)).toBe(false)
   })
+
+  test("can render woff2 fonts", ()=>{
+    for (const ext of ['woff', 'woff2']){
+      let woff = findFont("Monoton-Regular." + ext),
+          name = "Monoton"
+      expect(() => FontLibrary.use(woff)).not.toThrow()
+      expect(FontLibrary.has(name)).toBe(true)
+  
+      ctx.font = '256px Monoton'
+      ctx.fillText('G', 128, 256)
+  
+      // look for one of the gaps between the inline strokes of the G
+      let bmp = ctx.getImageData(300, 172, 1, 1)
+      expect(Array.from(bmp.data)).toEqual([0,0,0,0])
+    }
+
+
+    FontLibrary.reset()
+  })
+
 })

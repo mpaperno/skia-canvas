@@ -9,8 +9,8 @@ use metal::{CommandQueue, Device, MTLPixelFormat, MetalLayer};
 use objc::runtime::YES;
 use std::sync::{Arc, Mutex};
 use skia_safe::{
-    gpu::{mtl, BackendRenderTarget, DirectContext, SurfaceOrigin},
-    scalar, Budgeted, ImageInfo, ColorType, Size, Surface,
+    gpu::{mtl, backend_render_targets, BackendRenderTarget, Budgeted, DirectContext, direct_contexts, SurfaceOrigin, surfaces},
+    scalar, ImageInfo, ColorType, Size, Surface,
 };
 pub use objc::rc::autoreleasepool;
 
@@ -51,10 +51,9 @@ impl MetalEngine {
           mtl::BackendContext::new(
               device.as_ptr() as mtl::Handle,
               command_queue.as_ptr() as mtl::Handle,
-              std::ptr::null(),
           )
       };
-      if let Some(context) = DirectContext::new_metal(&backend_context, None){
+      if let Some(context) = direct_contexts::make_metal(&backend_context, None){
           Some(MetalEngine{context})
       }else{
           None
@@ -68,7 +67,7 @@ impl MetalEngine {
             let local_ctx = cell.borrow();
             let mut context = local_ctx.as_ref().unwrap().context.clone();
 
-            Surface::new_render_target(
+            surfaces::render_target(
                 &mut context,
                 Budgeted::Yes,
                 image_info,
@@ -76,6 +75,7 @@ impl MetalEngine {
                 SurfaceOrigin::BottomLeft,
                 None,
                 true,
+                None,
             )
         })
     }
@@ -118,11 +118,10 @@ impl MetalRenderer {
             mtl::BackendContext::new(
                 device.as_ptr() as mtl::Handle,
                 queue.as_ptr() as mtl::Handle,
-                std::ptr::null(),
             )
         };
 
-        let context = DirectContext::new_metal(&backend, None).unwrap();
+        let context = direct_contexts::make_metal(&backend, None).unwrap();
         MetalRenderer {
             layer: Arc::new(Mutex::new(layer)),
             context: Arc::new(Mutex::new(context)),
@@ -137,7 +136,7 @@ impl MetalRenderer {
             .set_drawable_size(CGSize::new(size.width as f64, size.height as f64));
     }
 
-    pub fn draw<F: FnOnce(&mut skia_safe::Canvas, LogicalSize<f32>)>(
+    pub fn draw<F: FnOnce(&skia_safe::Canvas, LogicalSize<f32>)>(
         &mut self,
         window: &Window,
         f: F,
@@ -152,18 +151,18 @@ impl MetalRenderer {
                 Size::new(size.width as scalar, size.height as scalar)
             };
 
+            let context = &mut self.context.lock().unwrap();
             let mut surface = unsafe {
                 let texture_info =
                     mtl::TextureInfo::new(drawable.texture().as_ptr() as mtl::Handle);
 
-                let backend_render_target = BackendRenderTarget::new_metal(
+                let backend_render_target = backend_render_targets::make_mtl(
                     (drawable_size.width as i32, drawable_size.height as i32),
-                    1,
                     &texture_info,
                 );
 
-                Surface::from_backend_render_target(
-                    &mut self.context.lock().unwrap(),
+                surfaces::wrap_backend_render_target(
+                    context,
                     &backend_render_target,
                     SurfaceOrigin::TopLeft,
                     ColorType::BGRA8888,
@@ -177,7 +176,7 @@ impl MetalRenderer {
             canvas.reset_matrix();
             canvas.scale((dpr as f32, dpr as f32));
             f(canvas, LogicalSize::from_physical(size, dpr));
-            surface.flush_and_submit();
+            context.flush_and_submit();
             drop(surface);
 
             let queue = self.queue.lock().unwrap();
