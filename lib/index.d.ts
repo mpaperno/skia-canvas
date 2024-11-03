@@ -271,6 +271,8 @@ type CornerRadius = number | DOMPoint
 
 interface CanvasTransform extends Omit<globalThis.CanvasTransform, "transform" | "setTransform">{}
 
+interface CanvasTextDrawingStyles extends Omit<globalThis.CanvasTextDrawingStyles, "fontKerning" | "fontVariantCaps" | "textRendering">{}
+
 export interface CanvasRenderingContext2D extends CanvasCompositing, CanvasDrawImage, CanvasDrawPath, CanvasFillStrokeStyles, CanvasFilters, CanvasImageData, CanvasImageSmoothing, CanvasPath, CanvasPathDrawingStyles, CanvasRect, CanvasShadowStyles, CanvasState, CanvasText, CanvasTextDrawingStyles, CanvasTransform, CanvasUserInterface {
   readonly canvas: Canvas;
   fontVariant: string;

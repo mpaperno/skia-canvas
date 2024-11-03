@@ -211,8 +211,14 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
   cx.export_function("CanvasRenderingContext2D_set_textBaseline", ctx::set_textBaseline)?;
   cx.export_function("CanvasRenderingContext2D_get_direction", ctx::get_direction)?;
   cx.export_function("CanvasRenderingContext2D_set_direction", ctx::set_direction)?;
+  cx.export_function("CanvasRenderingContext2D_get_letterSpacing", ctx::get_letterSpacing)?;
+  cx.export_function("CanvasRenderingContext2D_set_letterSpacing", ctx::set_letterSpacing)?;
+  cx.export_function("CanvasRenderingContext2D_get_wordSpacing", ctx::get_wordSpacing)?;
+  cx.export_function("CanvasRenderingContext2D_set_wordSpacing", ctx::set_wordSpacing)?;
   cx.export_function("CanvasRenderingContext2D_get_fontVariant", ctx::get_fontVariant)?;
   cx.export_function("CanvasRenderingContext2D_set_fontVariant", ctx::set_fontVariant)?;
+  cx.export_function("CanvasRenderingContext2D_get_fontStretch", ctx::get_fontStretch)?;
+  cx.export_function("CanvasRenderingContext2D_set_fontStretch", ctx::set_fontStretch)?;
   cx.export_function("CanvasRenderingContext2D_get_textTracking", ctx::get_textTracking)?;
   cx.export_function("CanvasRenderingContext2D_set_textTracking", ctx::set_textTracking)?;
   cx.export_function("CanvasRenderingContext2D_get_textWrap", ctx::get_textWrap)?;
