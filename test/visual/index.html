@@ -2,7 +2,7 @@
 <html>
   <head>
     <title>Skia Canvas: Visual Tests</title>
-		<meta name="color-scheme" content="dark light">
+    <meta name="color-scheme" content="dark light">
     <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;700&display=swap" rel="stylesheet">
     <link rel="preload" href="Monoton-Regular.woff2" as="font" type="font/woff2" crossorigin>
     <script src="https://bundle.run/pixelmatch@5.2.0"></script>
@@ -142,11 +142,17 @@
         <form id="optionsForm" method="get">
 
           <label for="gpu" title="Use GPU-based rendering on skia and browser canvas (if available in skia build and enabled in browser settings).">GPU</label>
-          <select id="gpu" name="gpu" title="The 'default' option doesn't explicitly set the skia canvas 'gpu' property or browser rendering either way.">
-            <option value="">default</option>
-            <option value="1">on</option>
-            <option value="0">off</option>
-          </select>
+          <fieldset class="inline">
+            <label for="gpu_0" title="The 'unset' option doesn't explicitly set the skia canvas 'gpu' property or browser rendering either way.">
+              <input type="radio" name="gpu" id="gpu_0" value="null"/>unset
+            </label>
+            <label for="gpu_1" title="Force GPU enabled (if availabe).">
+              <input type="radio" name="gpu" id="gpu_1" value="1"/>on
+            </label>
+            <label for="gpu_2" title="Force GPU disabled.">
+              <input type="radio" name="gpu" id="gpu_2" value="0"/>off
+            </label>
+          </fieldset>
 
           <label for="width">Canvas Size</label>
           <fieldset class="inline">
@@ -165,15 +171,19 @@
           <label for="bc">Page Color</label>
           <fieldset class="inline">
             <input id="bc" name="bc" type="color" title="Canvas view background color. Clear the 'Default' checkbox to select." disabled>
-            <label
-              title="Use browser default color. Clear this checkbox to be able to select a color."
-              ><input id="bc_default" name="bc_default" type="checkbox" value="1" onchange="this.form.bc.disabled = this.checked"
-              >Default</label
-            >
+            <label title="Use browser default color. Clear this checkbox to be able to select a color.">
+              <input id="bc_default" name="bc_default" type="checkbox" value="1" onchange="this.form.bc.disabled = this.checked">Default
+            </label>
           </fieldset>
 
-          <label for="diffMask" title="Use transparent background for difference view (disables AA diff)">Diff. Mask</label>
-          <input id="diffMask" name="diffMask" type="checkbox">
+          <label for="diffMask" title="Pixel difference view options">Diff. View</label>
+          <fieldset class="inline">
+            <label for="threshold" title="Difference threshold value.">δε</label>
+            <input id="threshold" name="threshold" type="number" min="0" max="1" step=".001" title="Difference threshold value." />
+            <label title="Use transparent background for difference view (disables AA diff)">
+              <input id="diffMask" name="diffMask" type="checkbox">Mask
+            </label>
+          </fieldset>
 
           <fieldset class="inline buttonbox">
             <button type="button" onclick="document.location.href='/'">reset all</button>
@@ -184,7 +194,7 @@
       </details>
 
       <p class="msg">
-        The tests below compare rendering with <a href="https://www.npmjs.com/package/skia-canvas">skia-canvas</a> to the browser's HTMLCanvas implementation.
+        The tests below compare rendering with <a href="https://www.npmjs.com/package/skia-canvas">skia-canvas</a> to the browser’s HTMLCanvas implementation.
       </p>
     </header>
 
@@ -200,10 +210,13 @@
         bc_default: true,
         gpu: undefined,
         diffMask: true,
+        threshold: 0.15,
       }
 
-      window.addEventListener('load', setupUi)
-      window.addEventListener('load', runTests)
+      window.addEventListener('load', () => {
+        setupUi()
+        runTests()
+      })
 
       function create (type, attrs, children) {
         const element = Object.assign(document.createElement(type), attrs)
@@ -265,7 +278,7 @@
           var output = outCtx.createImageData(outputCanvas.width, outputCanvas.height)
           window.pixelmatch(imageDataCanvas, imageDataGolden, output.data, imgCanvas.width, imgCanvas.height, {
             includeAA: false,
-            threshold: 0.125,
+            threshold: opt.threshold,
             alpha: 0.0,
             diffMask: opt.diffMask,
             aaColor: [0,255,0],
@@ -335,7 +348,8 @@
         const form = document.getElementById('optionsForm')
         form.width.value = opt.width.toFixed(0)
         form.height.value = opt.height.toFixed(0)
-        form.gpu.value = opt.gpu == null ? '' : opt.gpu ? '1' : '0'
+        form.threshold.value = opt.threshold.toFixed(3)
+        form.gpu.value = opt.gpu == null ? 'null' : opt.gpu ? '1' : '0'
         form.diffMask.checked = opt.diffMask
         // somewhat primitive attempt to separate the alpha value from hex code, assumes a hex color value
         const [_, rgb, a] = opt.cc.match(/#([\da-f]{1,2}[\da-f]{1,2}[\da-f]{1,2})([\da-f]+)?/i) || []
@@ -359,7 +373,11 @@
             console.log("Options cookie parse error:", e)
           }
         }
-        opt.diffMask = window.location.search.includes('diffMask')
+
+        // some options are set only via URL params
+        const params = new URL(location.href).searchParams
+        opt.threshold = parseFloat(params.get('threshold')) || opt.threshold
+        opt.diffMask = params.has('diffMask')
 
         document.getElementsByTagName('main')[0].style.backgroundColor = !opt.bc_default && opt.bc ? opt.bc : 'unset'
 

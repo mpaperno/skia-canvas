@@ -70,7 +70,7 @@ function setOptionsFromQuery(query) {
   }
   option.width = parseInt(query.width) || defaults.width
   option.height = parseInt(query.height) || defaults.height
-  option.gpu = query.gpu != null && query.gpu != '' ? !!parseInt(query.gpu) : defaults.gpu
+  option.gpu = query.gpu && query.gpu != 'null' ? !!parseInt(query.gpu) : defaults.gpu
   option.cc = query.cc ? decodeURIComponent(query.cc) : defaults.cc
   if (query.alpha != null && option.cc.length == 7 && option.cc[0] == '#') {
     // add alpha component into overall color (because browser's color input doesn't do alpha)
